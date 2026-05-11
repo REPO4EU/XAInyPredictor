@@ -1,0 +1,57 @@
+[project]
+name = "XAInyPredictor"
+description = "Shiny APP to apply XAI on different use cases"
+version = "1.0.0"
+authors = [
+  { name = "Joaquim Aguirre Plans", email = "quim.aguirre@hotmail.com" },
+]
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+dynamic = ["dependencies"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"XAInyPredictor" = [
+    "data/*", 
+    "shinyapp/www/*", 
+    "shinyapp/www/static/img/*", 
+    "shinyapp/www/pwa/*"
+]
+
+# set the entrypoint to have executable packages
+# here you can call the main using the command mytoolcommand
+# it's particulary useful when building docker containers with the CMD
+[project.scripts]
+xainypredictor = "XAInyPredictor.main:main"
+
+[project.urls]
+"Homepage" = "https://github.com/REPO4EU/XAInyPredictor"
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_provider = "pep621"
+update_changelog_on_bump = "true"
+
+[tool.coverage.run]
+source = ['XAInyPredictor']
+relative_files = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements.txt"] }
+
+[project.optional-dependencies]
+dev = ["pre-commit", "coverage", "commitizen"]

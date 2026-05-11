@@ -1,0 +1,136 @@
+html, body, .container.fluid {
+  width: 100vw;
+  min-height: 100vh;
+}
+
+.page-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 80px 1fr;
+
+  grid-template-areas:
+      "header"
+      "main ";
+
+  height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+.page-header {
+  grid-area: header;
+}
+.page-main {
+  grid-area: main;
+
+  transition: opacity .5s ease;
+  visibility: none;
+  z-index: -1;
+  opacity: 0;
+}
+
+.main-layout {
+  display: grid;
+
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+
+  grid-template-areas:
+    "sidebar"
+    "main";
+
+  height: 100%;
+  width: 100%;
+
+  padding: 20px;
+  gap: 20px;
+}
+@media only screen and (min-width: 800px) {
+  .main-layout {
+    grid-template-columns: minmax(0, 350px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+
+    grid-template-areas:
+      "sidebar main";
+  }
+}
+
+.card-style {
+  border: 1px solid #eaeaea;
+  padding: 20px;
+  border-radius: 5px;
+  box-shadow: rgb(0 0 0 / 10%) 3px 8px 12px;
+  overflow: hidden;
+}
+.no-padding {
+  padding: 0;
+}
+
+.main-main {
+  grid-area: main;
+}
+.main-sidebar {
+  grid-area: sidebar;
+}
+
+#map-map {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.navbar-top {
+  display: grid;
+  /* Columns: Title, flexible space, Menu, flexible space, Logo, Info */
+  grid-template-columns: auto 1fr auto 1fr auto 40px;
+  grid-template-rows: 1fr;
+  align-items: center; /* Vertically center everything */
+  
+  grid-template-areas:
+    "title ... menu ... logo info";
+
+  height: 100%;
+  width: 100%;
+  padding: 0 30px; /* Added horizontal padding for a cleaner look */
+  gap: 20px;
+}
+
+.navigation-title {
+  grid-area: title;
+  display: flex;
+  align-items: center;
+}
+
+.navigation-menu {
+  grid-area: menu;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+}
+
+.navigation-logo-right {
+  grid-area: logo;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.navigation-info {
+  grid-area: info;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Mobile responsive override */
+@media only screen and (max-width: 800px) {
+  .navbar-top {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    grid-template-areas:
+      "title info"
+      "menu  logo";
+    padding: 10px;
+  }
+}

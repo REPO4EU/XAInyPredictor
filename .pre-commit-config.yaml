@@ -1,0 +1,87 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+    - repo: https://github.com/pre-commit/pre-commit-hooks
+      rev: v5.0.0
+      hooks:
+          #Check python syntax
+          - id: check-ast
+            name: "Check: Python syntax errors?"
+          - id: trailing-whitespace
+            #Check trailing withespace
+            name: "Check Trailing whitespace in the code?"
+          #Check end of files
+          - id: end-of-file-fixer
+            name: "Check: Wrong end-of-files?"
+          #Check json syntax
+          - id: check-json
+            name: "Check: Json syntax errors?"
+          #Check toml syntax
+          - id: check-toml
+            name: "Check: toml syntax errors?"
+          #Check yaml syntax
+          - id: check-yaml
+            name: "Check: yaml syntax errors?"
+          #Check for large file commited
+          - id: check-added-large-files
+            name: "Check: Large files commited?"
+          #Check for private keys commited
+          - id: detect-private-key
+            name: "Check: private keys commited?"
+          #Check for AWS credentials
+          - id: detect-aws-credentials
+            args: ["--allow-missing-credentials"]
+            name: "Check: AWS credentials commited?"
+          #Sort requirements alphabetically
+          - id: requirements-txt-fixer
+            name: "Check: requirements.txt file sorted?"
+          #Protect commit to main and development
+          - id: no-commit-to-branch
+            name: "Check: Commiting onto protected branches?"
+            args: ["--branch", "main", "--branch", "development"]
+
+      #Standardize python code style
+    - repo: https://github.com/psf/black
+      rev: 23.3.0
+      hooks:
+          - id: black
+            name: "Python code style?"
+
+      #Sort imports in python code
+    - repo: https://github.com/asottile/reorder_python_imports
+      rev: v3.9.0
+      hooks:
+          - id: reorder-python-imports
+            name: "Python import sorted?"
+
+      #Check dockerfile standard
+    - repo: https://github.com/hadolint/hadolint
+      rev: v2.13.1-beta
+      hooks:
+          - id: hadolint
+            name: "Check: Unlinted Dockerfile?"
+            stages: [commit]
+            language: system
+            types: ["dockerfile"]
+
+      #Check ci file
+    - repo: https://github.com/python-jsonschema/check-jsonschema
+      rev: 0.33.0
+      hooks:
+          - id: check-gitlab-ci
+            name: "gitlab ci correct?"
+
+    # Check for leaked secrets in commited files
+    - repo: https://github.com/gitleaks/gitleaks
+      rev: v8.24.3
+      hooks:
+          - id: gitleaks
+            name: "Check: Hardcoded secrets commited?"
+            args: ["--staged", ".", "--verbose"]
+
+    - repo: https://github.com/commitizen-tools/commitizen
+      rev: v4.6.0
+      hooks:
+          - id: commitizen
+          - id: commitizen-branch
+            stages: [push]

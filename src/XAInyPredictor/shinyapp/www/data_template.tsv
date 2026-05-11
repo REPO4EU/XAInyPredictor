@@ -1,0 +1,2 @@
+ID	Age	Gender	BMI	Tumor size (cm)	Tumor stage	Node stage	Metastases	ATA risk	Histology	ETE	Multifocality	Vascular invasion	Resection	Goal of RAI
+<Patient ID>	<Integer 1-120>	"[M; F] (i.e., M = Male, F = Female)"	<Float>	<Float>	[T1a; T1b; T2; T3a; T3b; T4a; T4b]	[N0; N1a; N1b; Nx]	[M1; Mx]	[Low; Intermediate; High]	[OTC; PTC; FTC; PDTC]	[YES; NO]	[YES; NO]	[YES; NO]	[R0; R1; R2]	[ABLATION; ADIUVANT; THERAPEUTIC]

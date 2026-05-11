@@ -1,0 +1,138 @@
+.container-fluid {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.navbar-top {
+  background-color: #f0f8ff;
+}
+
+.navbar-button {
+  background-color: #f0f8ff;
+  height: 50px;
+  float: right;
+  border-radius: 4px;
+  margin: 0 2px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.navbar-button.active-tab {
+  background-color: #007bff !important;
+  color: white !important;
+  font-weight: bold;          /* Emphasize active state */
+  border-bottom: 3px solid #0056b3;  /* Optional underline or bottom border */
+  box-shadow: 0 2px 4px rgba(0,123,255,0.3);
+}
+
+.active-tab {
+  background-color: #9ccdf7 !important;
+  color: #000;
+}
+
+.navbar-info {
+  background-color: #f0f8ff;
+  height: 50px;
+  border: none;
+  float: right;
+  transition: 0.3s;
+}
+
+.navbar-info:hover {
+  background-color: #dde5ed;
+}
+
+.navbar-info:focus {
+  background-color: #f0f8ff;
+}
+
+.navbar-button:hover {
+  background-color: #dde5ed;
+  color: #000;
+}
+
+.navbar-button:focus {
+  outline: none;
+  background-color: #9ccdf7;
+}
+
+.navigation-title h3 {
+  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  text-transform: uppercase;
+  font-size: 2rem;
+}
+
+.navigation-logo-right img {
+  transition: transform 0.2s;
+}
+
+.navigation-logo-right img:hover {
+  transform: scale(1.05);
+}
+
+#div-navbar-map {
+  background-color: #f0f8ff;
+  height: 50px;
+  transition: 0.2s;
+  float: left;
+}
+
+#div-navbar-map:hover {
+  background-color: #dde5ed;
+}
+
+#div-navbar-plot {
+  background-color: #f0f8ff;
+  height: 50px;
+  transition: 0.3s;
+  float: right;
+}
+
+#div-navbar-plot:hover {
+  background-color: #dde5ed;
+}
+
+#div-navbar-plot:focus {
+  background-color: #f0f8ff;
+}
+
+.bootstrap-switch .bootstrap-switch-handle-on.bootstrap-switch-primary {
+  background: #9ccdf7;
+  color: #000;
+}
+
+.bootstrap-switch .bootstrap-switch-handle-off.bootstrap-switch-default {
+  background: #9ccdf7;
+  color: #000;
+}
+
+.divider {
+  height: 20px;
+}
+
+.col-sm-4 {
+  margin-top: 10px;
+  margin-left: 1.5%;
+  width: 30%;
+  height: 100%;
+}
+
+.col-sm-8 {
+  margin-top: 10px;
+  margin-left: -1%;
+  width: 68%;
+}
+
+.plot-sidebar {
+  padding: 19px;
+  margin-bottom: 20px;
+  margin-right: 5px;
+  background-color: #f5f5f520;
+  border: 1px solid #e3e3e3;
+}
+
+.main-visible {
+  opacity: 1;
+  z-index: 1;
+  visibility: visible;
+}

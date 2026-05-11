@@ -1,0 +1,6 @@
+Participant Id,Age,Gender,BMI,Histology,Tumor size (cm),Tumor stage,Node stage,Metastases,ETE,Multifocality,Vascular invasion,Resection,ATA risk ,Goal of RAI,Total mci,Persistence,RAI-R
+A,60,M,35.3,OTC,8.1,T3a,Nx,Mx,NO,NO,YES,R0,Intermediate,ADIUVANT ,300,Excellent Response,NO
+B,27,F,27.2,PTC,4.6,T3a,N0,Mx,NO,YES,NO,R0,Intermediate,ADIUVANT ,100,Excellent Response,NO
+C,68,F,23.1,OTC,4.8,T3a,N0,Mx,NO,NO,NO,R0,Intermediate,ADIUVANT ,100,Excellent Response,NO
+D,49,F,30.2,PTC,1.9,T1b,N1b,Mx,NO,NO,YES,R0,High,THERAPEUTIC ,200,Structural,YES
+E,53,F,20.0,PTC,5.1,T3a,Nx,Mx,NO,YES,NO,R0,Low,ADIUVANT ,100,Excellent Response,NO
