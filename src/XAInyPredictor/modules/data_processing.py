@@ -55,7 +55,7 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, targe
     return norm_df
 
 
-def process_raw_form_data(raw_df: pd.DataFrame, example_raw_df: pd.DataFrame) -> pd.DataFrame:
+def process_raw_form_data(raw_df: pd.DataFrame, example_raw_df: pd.DataFrame, encoding_config: dict = None) -> pd.DataFrame:
     """
     Processes raw data from the XAInyPredictor form to be used by the RAI algorithm.
 
@@ -64,21 +64,26 @@ def process_raw_form_data(raw_df: pd.DataFrame, example_raw_df: pd.DataFrame) ->
     :param example_raw_df: Pandas dataframe containing the raw example data. The
         data is used as reference to imputate missing values.
     :type example_raw_df: pd.DataFrame
+    :param encoding_config: Dictionary containing encoding mappings for categorical features.
+    :type encoding_config: dict
     :return: Pandas dataframe containing the processed data.
     :rtype: DataFrame
     """
     clean_df = clean_data(raw_df)
     non_numeric_summary = check_non_numeric_features(clean_df)
 
-    # Imputate values using as reference the example data (if necessary)
     original_length = len(clean_df)
     clean_example_raw_df = clean_data(example_raw_df)
     df_and_example = pd.concat([clean_df, clean_example_raw_df], ignore_index=True)
     df_and_example_nomissing = handle_missing_values(df_and_example)
 
-    # Normalize / Encode
-    encoding_dict = create_rai_encoding_dict()
+    if encoding_config is None:
+        encoding_dict = create_rai_encoding_dict()
+    else:
+        encoding_dict = encoding_config.copy()
+
     encoding_dict.pop('class_target', None)
+    encoding_dict.pop('Persistence', None)
     df_and_example_norm = normalize_and_encode_features(df_and_example_nomissing, encoding_dict)
 
     if original_length == 1:
