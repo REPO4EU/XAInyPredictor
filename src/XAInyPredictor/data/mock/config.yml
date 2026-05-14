@@ -1,0 +1,122 @@
+name: "Diabetes Risk Predictor"
+description: "Predict risk of Type 2 Diabetes development based on clinical parameters"
+
+target_column: "Diabetes-Risk"
+positive_class: "High"
+negative_class: "Low"
+features:
+  - name: "Age"
+    type: "numeric"
+    display_name: "Age (years)"
+    input_type: "numeric"
+    min: 18
+    max: 100
+    default: 45
+  - name: "BMI"
+    type: "numeric"
+    display_name: "BMI (kg/m²)"
+    input_type: "numeric"
+    min: 15
+    max: 60
+    default: 25
+  - name: "Blood Pressure"
+    type: "numeric"
+    display_name: "Systolic BP (mmHg)"
+    input_type: "numeric"
+    min: 80
+    max: 200
+    step: 1
+    default: 120
+  - name: "Glucose"
+    type: "numeric"
+    display_name: "Fasting Glucose (mg/dL)"
+    input_type: "numeric"
+    min: 50
+    max: 300
+    default: 100
+  - name: "Family History"
+    type: "categorical"
+    display_name: "Family History"
+    input_type: "select"
+    values:
+      - YES
+      - NO
+    default: "NO"
+  - name: "Smoking Status"
+    type: "categorical"
+    display_name: "Smoking Status"
+    input_type: "select"
+    values:
+      - Current
+      - Former
+      - Never
+    default: "Never"
+  - name: "Physical Activity"
+    type: "categorical"
+    display_name: "Physical Activity Level"
+    input_type: "select"
+    values:
+      - Sedentary
+      - Moderate
+      - Active
+    default: "Moderate"
+  - name: "Diet Quality"
+    type: "categorical"
+    display_name: "Diet Quality"
+    input_type: "select"
+    values:
+      - Poor
+      - Average
+      - Good
+    default: "Average"
+
+encoding:
+  Family History:
+    NO: 0
+    YES: 1
+  Smoking Status:
+    Never: 0
+    Former: 1
+    Current: 2
+  Physical Activity:
+    Sedentary: 0
+    Moderate: 1
+    Active: 2
+  Diet Quality:
+    Poor: 0
+    Average: 1
+    Good: 2
+
+labels:
+  positive_class: "High Risk"
+  negative_class: "Low Risk"
+  probability_column: "Risk Probability"
+  class_column: "Risk Level"
+  form:
+    add_patient_button: "Add Patient to Cohort"
+    delete_selected_button: "Delete Selected"
+    cohort_title: "Current Patient Cohort"
+titles:
+  app_title: "XAInyPredictor"
+  tab_data_input: "1. Data Input"
+  tab_data_exploration: "2. Data Exploration"
+  tab_prediction: "3. Prediction"
+  data_source: "Data Source"
+  select_method: "Select Method:"
+  manual_entry: "Manual Entry"
+  upload_file: "Upload File"
+  example_cohort: "Example Cohort"
+  feature_analysis: "Risk Analysis"
+  distance_analysis: "Feature Analysis"
+  prediction_results: "Risk Assessment"
+help_texts:
+  fnr_threshold: "Adjust the sensitivity of the risk assessment."
+  fnr_zero: "Classify all high-risk patients regardless of probability (high sensitivity)."
+  fnr_higher: "Focus on high-confidence predictions (high specificity)."
+  reference_population_input: "Show distribution of your patient data."
+  reference_population_model: "Show distribution of the model training data."
+  radar_plot: "Compare patient features against population averages."
+  radar_average_all: "Average of all patients in the model."
+  radar_average_negative: "Average of low-risk patients (green)."
+  radar_average_positive: "Average of high-risk patients (red)."
+  curves_plot: "Show how each feature value relates to risk."

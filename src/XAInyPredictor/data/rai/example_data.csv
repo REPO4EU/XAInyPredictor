@@ -4,3 +4,5 @@ B,27,F,27.2,PTC,4.6,T3a,N0,Mx,NO,YES,NO,R0,Intermediate,ADIUVANT ,100,Excellent 
 C,68,F,23.1,OTC,4.8,T3a,N0,Mx,NO,NO,NO,R0,Intermediate,ADIUVANT ,100,Excellent Response,NO
 D,49,F,30.2,PTC,1.9,T1b,N1b,Mx,NO,NO,YES,R0,High,THERAPEUTIC ,200,Structural,YES
 E,53,F,20.0,PTC,5.1,T3a,Nx,Mx,NO,YES,NO,R0,Low,ADIUVANT ,100,Excellent Response,NO
+F,52,M,33.0,PTC,7.1,T1b,Nx,Mx,NO,YES,NO,R0,High,THERAPEUTIC ,100,Structural,YES
+G,69,M,30.0,OTC,3.0,T1b,N0,Mx,NO,YES,NO,R0,Low,ADIUVANT ,100,Excellent Response,YES

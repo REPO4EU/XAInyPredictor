@@ -1,0 +1,226 @@
+name: "RAI-R Predictor"
+description: "Predict Radioiodine Refractoriness (RAI-R) in thyroid cancer patients"
+
+target_column: "RAI-R"
+positive_class: "YES"
+negative_class: "NO"
+
+features:
+  - name: "Age"
+    type: "numeric"
+    display_name: "Age (years)"
+    input_type: "numeric"
+    min: 1
+    max: 120
+    default: 50
+  - name: "Gender"
+    type: "categorical"
+    display_name: "Gender"
+    input_type: "select"
+    values:
+      - M
+      - F
+    default: "M"
+  - name: "BMI"
+    type: "numeric"
+    display_name: "BMI (kg/m²)"
+    input_type: "numeric"
+    min: 10
+    max: 60
+    default: 27
+  - name: "Tumor size (cm)"
+    type: "numeric"
+    display_name: "Tumor Size (cm)"
+    input_type: "numeric"
+    min: 0.5
+    max: 15
+    step: 0.5
+    default: 5
+  - name: "Histology"
+    type: "categorical"
+    display_name: "Histology"
+    input_type: "select"
+    values:
+      - OTC
+      - PTC
+      - FTC
+      - PDTC
+    display_values:
+      OTC: "Oncocytic Thyroid Carcinoma"
+      PTC: "Papillary Thyroid Carcinoma"
+      FTC: "Follicular Thyroid Carcinoma"
+      PDTC: "Poorly Differentiated Thyroid Carcinoma"
+    default: "PTC"
+  - name: "Tumor stage"
+    type: "categorical"
+    display_name: "Tumor Stage"
+    input_type: "select"
+    values:
+      - T1a
+      - T1b
+      - T2
+      - T3a
+      - T3b
+      - T4a
+      - T4b
+    default: "T1a"
+    help_text: "Based on AJCC 8th Edition. T1a: ≤1cm, T1b: >1cm-2cm, T2: >2cm-4cm limited to thyroid."
+  - name: "Node stage"
+    type: "categorical"
+    display_name: "Node Stage"
+    input_type: "select"
+    values:
+      - N0
+      - N1a
+      - N1b
+      - Nx
+    default: "N0"
+    help_text: "N1a: Level VI/VII compartments. N1b: Lateral neck or mediastinal nodes."
+  - name: "Metastases"
+    type: "categorical"
+    display_name: "Metastases"
+    input_type: "select"
+    values:
+      - M1
+      - Mx
+    default: "M1"
+  - name: "ETE"
+    type: "categorical"
+    display_name: "Extrathyroidal Extension (ETE)"
+    input_type: "select"
+    values:
+      - YES
+      - NO
+    default: "NO"
+    help_text: "Microscopic or Gross extension beyond the thyroid capsule."
+  - name: "Multifocality"
+    type: "categorical"
+    display_name: "Multifocality"
+    input_type: "select"
+    values:
+      - YES
+      - NO
+    default: "NO"
+  - name: "Vascular invasion"
+    type: "categorical"
+    display_name: "Vascular Invasion"
+    input_type: "select"
+    values:
+      - YES
+      - NO
+    default: "NO"
+  - name: "Resection"
+    type: "categorical"
+    display_name: "Resection Status"
+    input_type: "select"
+    values:
+      - R0
+      - R1
+      - R2
+    default: "R0"
+  - name: "ATA risk"
+    type: "categorical"
+    display_name: "ATA Risk Level"
+    input_type: "select"
+    values:
+      - Low
+      - Intermediate
+      - High
+    default: "Low"
+    help_text: "2015 ATA Guidelines. High Risk includes: Gross ETE, incomplete resection, distant mets, or large/invasive nodes."
+  - name: "Goal of RAI"
+    type: "categorical"
+    display_name: "Goal of RAI"
+    input_type: "select"
+    values:
+      - ABLATION
+      - ADIUVANT
+      - THERAPEUTIC
+    display_values:
+      ABLATION: "Ablation"
+      ADIUVANT: "Adjuvant"
+      THERAPEUTIC: "Therapeutic"
+    default: "ABLATION"
+
+encoding:
+  Gender:
+    M: 0
+    F: 1
+  Histology:
+    OTC: 1
+    PTC: 2
+    FTC: 3
+    PDTC: 4
+  Tumor stage:
+    T1a: 1
+    T1b: 2
+    T2: 3
+    T3a: 4
+    T3b: 5
+    T4a: 6
+    T4b: 7
+    Tx: -1
+  Node stage:
+    N0: 0
+    N1a: 1
+    N1b: 2
+    Nx: -1
+  Metastases:
+    Mx: 0
+    M1: 1
+  ETE:
+    NO: 0
+    YES: 1
+  Multifocality:
+    NO: 0
+    YES: 1
+  Vascular invasion:
+    NO: 0
+    YES: 1
+  Resection:
+    R0: 0
+    R1: 1
+    R2: 2
+  ATA risk:
+    Low: 1
+    Intermediate: 2
+    High: 3
+  Goal of RAI:
+    ABLATION: 1
+    ADIUVANT: 2
+    THERAPEUTIC: 3
+
+labels:
+  positive_class: "Refractory"
+  negative_class: "Non-Refractory"
+  probability_column: "Probability"
+  class_column: "Classification"
+  form:
+    add_patient_button: "Add Patient to Cohort"
+    delete_selected_button: "Delete Selected"
+    cohort_title: "Current Patient Cohort"
+    no_data_message: "No data uploaded."
+titles:
+  app_title: "XAInyPredictor"
+  tab_data_input: "1. Data Input"
+  tab_data_exploration: "2. Data Exploration"
+  tab_prediction: "3. Prediction"
+  data_source: "Data Source"
+  select_method: "Select Method:"
+  manual_entry: "Manual Entry"
+  upload_file: "Upload File"
+  example_cohort: "Example Cohort"
+  feature_analysis: "Feature Analysis"
+  distance_analysis: "Distance Analysis"
+  prediction_results: "Prediction Results"
+help_texts:
+  fnr_threshold: "This controls the safety margin of the model."
+  fnr_zero: "We refuse to miss any true RAI-Refractory patients. The model will classify a patient as Refractory even if the probability is low (High Sensitivity)."
+  fnr_higher: "We accept missing some Refractory patients to ensure those we treat are definitely Refractory (High Specificity)."
+  reference_population_input: "It will show the distribution of the input data."
+  reference_population_model: "It will show the distribution of the model data."
+  radar_plot: "The radar plot compares the values of the features from a selected patient with three different distributions."
+  radar_average_all: "The average values from all patients in the model."
+  radar_average_negative: "The average values from all RAI-R negative patients in the model (green)."
+  radar_average_positive: "The average values from all RAI-R positive patients in the model (red)."
+  curves_plot: "The curves plot displays the distribution of values from a specific feature across the patients in the model, ordered from lowest to highest."
