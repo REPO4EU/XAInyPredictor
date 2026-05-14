@@ -6,14 +6,21 @@ from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
 
 
 @module.ui
-def data_exploration_ui():
+def data_exploration_ui(config=None):
+    if config is None:
+        config = {}
+
+    features = config.get("features", [])
+    feature_choices = [f["display_name"] for f in features] if features else ['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk']
+    default_feature = feature_choices[0] if feature_choices else 'Age'
+
     return ui.layout_sidebar(
         ui.sidebar(
             ui.input_select(
                 id="feature_to_plot",
                 label="Feature to plot:",
-                choices=['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk'],
-                selected='Age',
+                choices=feature_choices,
+                selected=default_feature,
             ),
             ui.input_select(
                 id="reference_data",
@@ -66,7 +73,7 @@ def data_exploration_ui():
 
 
 @module.server
-def server(input: Inputs, output: Outputs, session: Session, global_input_data, model_data, patient_selected_id):
+def server(input: Inputs, output: Outputs, session: Session, global_input_data, model_data, patient_selected_id, config_init=None, config_reactive=None):
 
     @output
     @render.ui
@@ -137,7 +144,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         if reference_data == 'Input data':
             df = global_input_data.get()
         else:
-            df = model_data
+            md = model_data.get()
+            df = md.get("X_TRAIN_RAW") if md else None
 
         if df is None or df.empty:
             return ui.p("No data available")
@@ -215,8 +223,10 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         # Get model data if necessary
         reference_data = input.reference_data()
         if reference_data == 'Model':
-            df = model_data
-            df = pd.concat([df, patient_row])
+            md = model_data.get()
+            df = md.get("X_TRAIN_RAW") if md else None
+            if df is not None:
+                df = pd.concat([df, patient_row])
 
         # Create figure
         fig, ax = plt.subplots()

@@ -4,11 +4,23 @@ import pandas as pd
 from shiny import Inputs, Outputs, Session, module, reactive, render, ui
 
 # Local imports
-from XAInyPredictor.modules.rai import analyze_patient, threshold_for_target_fnr
+from XAInyPredictor.modules.analyzer import analyze_patient, threshold_for_target_fnr
 
 
 @module.ui
-def prediction_ui():
+def prediction_ui(config=None):
+    if config is None:
+        config = {}
+
+    titles = config.get("titles", {})
+    labels = config.get("labels", {})
+    help_texts = config.get("help_texts", {})
+
+    pos_class = labels.get("positive_class", "Positive")
+    neg_class = labels.get("negative_class", "Negative")
+    prob_col = labels.get("probability_column", "Probability")
+    class_col = labels.get("class_column", "Class")
+
     return ui.layout_sidebar(
         ui.sidebar(
             ui.output_ui("patient_selector_ui"),
@@ -21,10 +33,10 @@ def prediction_ui():
                             ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
                             ui.tags.div(
                                 ui.tags.b("Understanding this threshold:"),
-                                ui.tags.p("This controls the safety margin of the model."),
+                                ui.tags.p(help_texts.get("fnr_threshold", "This controls the safety margin of the model.")),
                                 ui.tags.ul(
-                                    ui.tags.li(ui.tags.b("0% False Negative Ratio:"), " We refuse to miss any true RAI-Refractory patients. The model will classify a patient as Refractory even if the probability is low (High Sensitivity)."),
-                                    ui.tags.li(ui.tags.b("Higher False Negative Ratio:"), " We accept missing some Refractory patients to ensure those we treat are definitely Refractory (High Specificity)."),
+                                    ui.tags.li(ui.tags.b("0% False Negative Ratio:"), " " + help_texts.get("fnr_zero", "We refuse to miss any true positive patients.")),
+                                    ui.tags.li(ui.tags.b("Higher False Negative Ratio:"), " " + help_texts.get("fnr_higher", "We accept missing some positive patients for higher specificity.")),
                                 ),
                                 style="width: 250px;"
                             ),
@@ -40,13 +52,12 @@ def prediction_ui():
                 id="view_mode",
                 label="Select View:",
                 choices={
-                    "radar": "Feature Analysis (Radar)", 
-                    "curve": "Distance Analysis (Curve)"
+                    "radar": titles.get("feature_analysis", "Feature Analysis (Radar)"),
+                    "curve": titles.get("distance_analysis", "Distance Analysis (Curve)")
                 },
                 selected="radar",
             ),
             ui.output_ui("features_to_plot_ui"),
-            # Conditionally show radar options only when Radar is visible
             ui.panel_conditional(
                 "input.view_mode == 'radar'",
                 ui.input_checkbox_group(
@@ -55,8 +66,8 @@ def prediction_ui():
                     choices={
                         "closest": "Closest patients",
                         "average": "Average all patients",
-                        "average_0": "Avg. RAI-R negative",
-                        "average_1": "Avg. RAI-R positive",
+                        "average_0": f"Avg. {neg_class}",
+                        "average_1": f"Avg. {pos_class}",
                     },
                     selected=["closest", "average", "average_0", "average_1"],
                 ),
@@ -67,15 +78,15 @@ def prediction_ui():
                 ui.card(
                     ui.card_header(
                         ui.div(
-                            "Prediction results ",
+                            titles.get("prediction_results", "Prediction results "),
                             ui.popover(
                                 ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
                                 ui.tags.div(
                                     ui.tags.b("Prediction results:"),
                                     ui.tags.p("The table shows the predictions of the model:"),
                                     ui.tags.ul(
-                                        ui.tags.li(ui.tags.b("Probability:"), " Indicates the probability of a patient to be RAI-Refractory (resistant). The higher the probability, the more likely it is."),
-                                        ui.tags.li(ui.tags.b("RAI-R class:"), " Classifies the patient in Refractory or Not Refractory. YES = Refractory; NO = Not Refractory."),
+                                        ui.tags.li(ui.tags.b(f"{prob_col}:"), f" Indicates the probability. The higher, the more likely."),
+                                        ui.tags.li(ui.tags.b(f"{class_col}:"), f" Classifies as {pos_class} or {neg_class}."),
                                     ),
                                     style="width: 250px;"
                                 ),
@@ -94,7 +105,8 @@ def prediction_ui():
 
 
 @module.server
-def server(input: Inputs, output: Outputs, session: Session, global_input_data, patient_selected_id, delta_train, delta_test_reac, x_train, y_train, x_test_reac, y_test, prob_threshold, feature_names, features_to_plot):
+def server(input: Inputs, output: Outputs, session: Session, global_input_data, patient_selected_id, model_data, delta_test_reactive, x_test_reactive, prob_threshold, config_init, config_reactive=None):
+    cfg = config_init if config_init else {}
 
     @output
     @render.ui
@@ -142,6 +154,9 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         to plot from the argument features_to_plot, which obtains them from the
         features that appear in the formula (discarding the ones that do not appear).
         """
+        md = model_data.get()
+        feature_names = md.get("FEATURE_ORDER_DISPLAY", []) if md else []
+        features_to_plot = md.get("FEATS_IN_FORMULA", []) if md else []
         return ui.input_selectize(
             id="features_to_plot",
             label="Select features to view:",
@@ -243,7 +258,9 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         Calculate probability threshold when the FNR threshold changes.
         """
         fnr_val = input.fnr_threshold()
-        delta_test = delta_test_reac.get()
+        delta_test = delta_test_reactive.get()
+        md = model_data.get()
+        y_test = md.get("Y_TEST") if md else None
 
         if y_test is None or delta_test is None:
             return
@@ -251,7 +268,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         try:
             target_fnr = float(fnr_val) / 100
         except ValueError:
-            return 
+            return
 
         # Calculate probability threshold
         y_test.sort_index(inplace=True)
@@ -262,7 +279,6 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             target_fnr=target_fnr
         )
 
-        # Update the shared reactive value
         prob_threshold.set(threshold)
         print(f"Updated Threshold: {threshold:.3f} (Target FNR: {target_fnr})")
 
@@ -275,21 +291,29 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         Returns a dictionary of data or None if invalid.
         """
         df = global_input_data.get()
-        delta_test = delta_test_reac.get()
-        x_test = x_test_reac.get()
+        delta_test = delta_test_reactive.get()
+        x_test = x_test_reactive.get()
         patient_id = patient_selected_id.get()
-        
+
+        md = model_data.get()
+        if md is None:
+            return None
+
+        delta_train = md.get("D_TRAIN")
+        x_train = md.get("X_TRAIN")
+        y_train = md.get("Y_TRAIN")
+
         # Validation checks
         if any((x is None) or (isinstance(x, pd.DataFrame) and x.empty) for x in [df, delta_train, delta_test, x_train, y_train, patient_id]):
             return None
-        
+
         all_ids = sorted(df['ID'].astype(int).tolist())
         if patient_id == None or int(patient_id) not in all_ids:
             return None
 
         # Standardize columns
         df.columns = [col.replace(' ', '_') for col in df.columns]
-        
+
         return {
             "patient_id": patient_id,
             "df": df,
@@ -371,48 +395,48 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
     @render.data_frame
     def results_table_output():
         df = global_input_data.get()
-        delta_test = delta_test_reac.get()
+        delta_test = delta_test_reactive.get()
         sel_id = patient_selected_id.get()
         prob_thr = prob_threshold.get()
 
-        # Check that all inputs exist
+        cfg = config_init if config_init else {}
+        labels = cfg.get("labels", {})
+        pos_class = labels.get("positive_class", "YES")
+        neg_class = labels.get("negative_class", "NO")
+        prob_col = labels.get("probability_column", "Probability")
+        class_col = labels.get("class_column", "Class")
+
         if df is None or delta_test is None or df.empty or delta_test.empty:
             return render.DataGrid(
                 pd.DataFrame({"Message": ["No data available."]}),
                 width="100%"
             )
 
-        # Check probability threshold
         if prob_thr is None:
             prob_thr = 0
 
-        # Extract predictions
         res_df = df.copy()
         if "pred_prob" in delta_test.columns:
             res_df = pd.concat([res_df, delta_test[["pred_prob"]]], axis=1)
-            res_df = res_df.rename(columns={"pred_prob" : "Probability"}).sort_values(by=['ID'])
-            res_df["RAI-R Class"] = np.where(res_df["Probability"] >= prob_thr, 'YES', 'NO')
+            res_df = res_df.rename(columns={"pred_prob": prob_col}).sort_values(by=['ID'])
+            res_df[class_col] = np.where(res_df[prob_col] >= prob_thr, pos_class, neg_class)
 
-        # Formatting
-        columns_to_show = "ID", "Probability", "RAI-R Class"
+        columns_to_show = "ID", prob_col, class_col
         final_cols = [col for col in columns_to_show if col in res_df.columns]
         res_df = res_df[final_cols].reset_index(drop=True)
 
-        # Round values for visualization in the UI
-        res_df["Probability"] = res_df["Probability"].round(3)
+        res_df[prob_col] = res_df[prob_col].round(3)
 
-        # Define style for table
         table_styles = None
         if sel_id:
-            # Return empty table if selected ID not found
             if (res_df[res_df['ID'] == sel_id].empty):
                 return render.DataGrid(
                     pd.DataFrame({"Message": ["Selected ID not found."]}),
                     width="100%"
                 )
             sel_id_row = int(res_df[res_df['ID'] == sel_id].index[0])
-            yes_class_rows = res_df[res_df['RAI-R Class'] == 'YES'].index.to_list()
-            no_class_rows = res_df[res_df['RAI-R Class'] == 'NO'].index.to_list()
+            pos_rows = res_df[res_df[class_col] == pos_class].index.to_list()
+            neg_rows = res_df[res_df[class_col] == neg_class].index.to_list()
             table_styles = [
                 {
                     "rows": [sel_id_row],
@@ -423,7 +447,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     },
                 },
                 {
-                    "rows": yes_class_rows,
+                    "rows": pos_rows,
                     "cols": list(range(len(res_df.columns))),
                     "style": {
                         "color": "#dc3545",
@@ -431,7 +455,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     },
                 },
                 {
-                    "rows": no_class_rows,
+                    "rows": neg_rows,
                     "cols": list(range(len(res_df.columns))),
                     "style": {
                         "color": "#198754",

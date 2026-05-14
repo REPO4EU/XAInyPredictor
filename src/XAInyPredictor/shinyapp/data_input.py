@@ -3,25 +3,102 @@ from shiny import Inputs, Outputs, Session, module, reactive, render, ui
 from XAInyPredictor.modules.data_processing import clean_data
 
 
-@module.ui
-def data_input_ui():
+def build_form_fields(config: dict) -> tuple:
+    """Build form fields dynamically from config.
+    Returns (columns, labels_dict) where columns is a list of ui.div for layout,
+    and labels_dict maps input_id to display_label for server-side access.
+    """
+    features = config.get("features", [])
+    labels = config.get("labels", {})
 
-    # Helper for consistent help icons
-    def help_icon(msg):
-        return ui.tooltip(
-            ui.span(ui.tags.i(class_="glyphicon glyphicon-question-sign"), style="cursor: pointer; color: #007bc2; margin-left: 5px;"),
-            msg,
-            placement="right"
-        )
+    if not features:
+        return None, {}
+
+    columns = []
+    labels_dict = {}
+    current_column = []
+    column_count = 0
+
+    for idx, feature in enumerate(features):
+        feat_name = feature.get("name", "")
+        display_name = feature.get("display_name", feat_name)
+        input_type = feature.get("input_type", "numeric")
+        values = feature.get("values", [])
+        display_values = feature.get("display_values", {})
+        default = feature.get("default", "")
+        help_text = feature.get("help_text", "")
+        min_val = feature.get("min", 0)
+        max_val = feature.get("max", 100)
+        step = feature.get("step", 1)
+
+        input_id = f"in_{feat_name.replace(' ', '_').replace('(', '').replace(')', '')}"
+        labels_dict[input_id] = feat_name
+
+        field_ui = None
+
+        if input_type == "numeric":
+            field_ui = ui.input_numeric(
+                input_id,
+                display_name,
+                value=default if default else min_val,
+                min=min_val,
+                max=max_val,
+                step=step
+            )
+        elif input_type == "select" and values:
+            choices = {}
+            for v in values:
+                display = display_values.get(v, v)
+                choices[v] = display
+            field_ui = ui.input_select(input_id, display_name, choices=choices, selected=default)
+
+        if help_text and field_ui:
+            field_ui = ui.div(
+                field_ui,
+                ui.tooltip(
+                    ui.span(ui.tags.i(class_="glyphicon glyphicon-question-sign"), style="cursor: pointer; color: #007bc2; margin-left: 5px;"),
+                    help_text,
+                    placement="right"
+                ),
+                style="display: flex; align-items: center;"
+            )
+
+        current_column.append(ui.div(field_ui, style="margin-bottom: 10px;"))
+
+        if (idx + 1) % 4 == 0 or idx == len(features) - 1:
+            if current_column:
+                col_ui = ui.div(
+                    *current_column,
+                    style="padding: 10px;"
+                )
+                columns.append(col_ui)
+                current_column = []
+                column_count += 1
+
+    col_widths = []
+    for _ in range(len(columns)):
+        col_widths.append(12 // len(columns) if len(columns) > 0 else 12)
+
+    return columns, labels_dict
+
+
+@module.ui
+def data_input_ui(config=None):
+    if config is None:
+        config = {}
+
+    labels = config.get("labels", {})
+    titles = config.get("titles", {})
+
+    form_columns, labels_dict = build_form_fields(config)
 
     return ui.layout_sidebar(
-        # --- SIDE BAR ---
         ui.sidebar(
-            ui.h4("Data Source"),
+            ui.h4(labels.get("data_source", "Data Source")),
             ui.input_radio_buttons(
                 "input_method",
-                "Select Method:",
-                {"form": "Manual Entry", "file": "Upload File", "example": "Example Cohort"}
+                labels.get("select_method", "Select Method:"),
+                {"form": labels.get("manual_entry", "Manual Entry"), "file": labels.get("upload_file", "Upload File"), "example": labels.get("example_cohort", "Example Cohort")}
             ),
             ui.panel_conditional(
                 "input.input_method == 'file'",
@@ -31,77 +108,28 @@ def data_input_ui():
                     accept=[".tsv", ".csv", ".xlsx"],
                     multiple=False,
                 ),
-                ui.p("Ensure columns match the ", ui.a("standard template", href="data_template.xlsx", target="_blank"), ".", style="font-size: 0.8em; color: gray;"),
+                ui.p("Ensure columns match the template.", style="font-size: 0.8em; color: gray;"),
             ),
         ),
 
-        # --- MANUAL ENTRY FORM (only when input_method = form) ---
         ui.panel_conditional(
             "input.input_method == 'form'",
             ui.card(
-                ui.card_header(ui.tags.b("➕ New Patient Entry")),
-                
-                # We use layout_columns to create a 3-column grid
-                # col_widths sets the relative width of columns (total 12)
-                ui.layout_columns(
-                    
-                    # COLUMN 1: Demographics & Tumor Basics
-                    ui.div(
-                        ui.h5("1. Demographics & Tumor", style="color: #007bc2; border-bottom: 1px solid #eee; padding-bottom: 5px;"),
-                        ui.input_numeric("in_age", "Age (years)", value=50, min=1, max=120, step=1),
-                        ui.input_select("in_gender", "Gender", choices={'M': 'Male', 'F': 'Female'}, selected="M"),
-                        ui.input_numeric("in_bmi", "BMI (kg/m²)", value=27, min=10, max=60, step=1),
-                        ui.input_numeric("in_tumor_size", "Tumor Size (cm)", value=5, min=0.5, max=15, step=0.5),
-                        ui.input_select("in_histology", "Histology", choices={'OTC': 'Oncocytic Thyroid Carcinoma', 'PTC': 'Papillary Thyroid Carcinoma', 'FTC': 'Follicular Thyroid Carcinoma', 'PDTC': 'Poorly Differentiated Thyroid Carcinoma'}, selected='PTC'),
-                    ),
-
-                    # COLUMN 2: Staging & Risk
-                    ui.div(
-                        ui.h5("2. Staging & Risk", style="color: #007bc2; border-bottom: 1px solid #eee; padding-bottom: 5px;"),                        
-                        ui.div(
-                            ui.input_select("in_tumor_stage", "Tumor Stage", choices=['T1a', 'T1b', 'T2', 'T3a', 'T3b', 'T4a', 'T4b'], selected='T1a'),
-                            help_icon("Based on AJCC 8th Edition. T1a: ≤1cm, T1b: >1cm-2cm, T2: >2cm-4cm limited to thyroid.")
-                        , style="display: flex; align-items: center;"),
-                        ui.div(
-                            ui.input_select("in_node_stage", "Node Stage", choices=['N0', 'N1a', 'N1b', 'Nx'], selected='N0'),
-                            help_icon("N1a: Level VI/VII compartments. N1b: Lateral neck or mediastinal nodes.")
-                        , style="display: flex; align-items: center;"),
-                        ui.input_select("in_metastases", "Metastasis Stage", choices=['M1', 'Mx'], selected='M1'),
-                        ui.div(
-                            ui.input_select("in_ata_risk", "ATA Risk Level", choices=['Low', 'Intermediate', 'High'], selected='Low'),
-                            help_icon("2015 ATA Guidelines. High Risk includes: Gross ETE, incomplete resection, distant mets, or large/invasive nodes.")
-                        , style="display: flex; align-items: center;"),
-                    ),
-
-                    # COLUMN 3: Pathology & Treatment
-                    ui.div(
-                        ui.h5("3. Pathology & Treatment", style="color: #007bc2; border-bottom: 1px solid #eee; padding-bottom: 5px;"),   
-                        ui.div(
-                            ui.input_select("in_ete", "Extrathyroidal Ext. (ETE)", choices={'YES': 'Yes', 'NO': 'No'}, selected='NO'),
-                            help_icon("Microscopic or Gross extension beyond the thyroid capsule.")
-                        , style="display: flex; align-items: center;"),
-                        ui.input_select("in_multifocality", "Multifocality", choices={'YES': 'Yes', 'NO': 'No'}, selected='NO'),
-                        ui.input_select("in_vascular_invasion", "Vascular Invasion", choices={'YES': 'Yes', 'NO': 'No'}, selected='NO'),
-                        ui.input_select("in_resection", "Resection Status", choices=['R0', 'R1', 'R2'], selected='R0'),
-                        ui.input_select("in_goal_of_rai", "Goal of RAI", choices={'ABLATION': 'Ablation', 'ADIUVANT': 'Adjuvant', 'THERAPEUTIC': 'Therapeutic'}, selected='ABLATION'),
-                    ),
-                    col_widths=(4, 4, 4)
-                ),
-                
+                ui.card_header(ui.tags.b("➕ " + (labels.get("form", {}).get("add_patient_button", "New Patient Entry")))),
+                ui.layout_columns(*form_columns, col_widths=tuple([4] * len(form_columns))) if form_columns else ui.p("No features configured."),
                 ui.card_footer(
-                    ui.input_action_button("btn_add_form", "Add Patient to Cohort", class_="btn-primary", width="100%")
+                    ui.input_action_button("btn_add_form", labels.get("form", {}).get("add_patient_button", "Add Patient to Cohort"), class_="btn-primary", width="100%")
                 )
             ),
             ui.br()
         ),
 
-        # --- COHORT TABLE ---
         ui.card(
-            ui.card_header(ui.tags.b("Current Patient Cohort")),
+            ui.card_header(ui.tags.b(labels.get("form", {}).get("cohort_title", "Current Patient Cohort"))),
             ui.output_data_frame("out_patient_table"),
             ui.panel_conditional(
                 "input.input_method == 'form'",
-                ui.input_action_button("btn_delete_selected", "Delete Selected", class_="btn-danger btn-sm", width="100%")
+                ui.input_action_button("btn_delete_selected", labels.get("form", {}).get("delete_selected_button", "Delete Selected"), class_="btn-danger btn-sm", width="100%")
             ),
             full_screen=True
         )
@@ -109,28 +137,28 @@ def data_input_ui():
 
 
 @module.server
-def server(input: Inputs, output: Outputs, session: Session, example_raw_data):
-    """
-    Returns a dictionary of reactive values:
-    - 'data': The processed dataframe ready for analysis
-    - 'is_custom': Boolean, True if user provided their own data
-    """
+def server(input: Inputs, output: Outputs, session: Session, model_data, config_init, config_reactive=None):
+    cfg = config_init if config_init else {}
+    features = cfg.get("features", [])
 
-    # Define reactive value for the form dataframe
-    feature_cols = ['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk', 'Histology', 'ETE', 'Multifocality', 'Vascular invasion', 'Resection', 'Goal of RAI']
+    labels_dict = {}
+
+    if features:
+        feature_cols = [f["name"] for f in features]
+        for f in features:
+            feat_name = f.get("name", "")
+            input_id = f"in_{feat_name.replace(' ', '_').replace('(', '').replace(')', '')}"
+            labels_dict[input_id] = feat_name
+    else:
+        feature_cols = ['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk', 'Histology', 'ETE', 'Multifocality', 'Vascular invasion', 'Resection', 'Goal of RAI']
+
     form_df = reactive.Value(pd.DataFrame(columns=['ID'] + feature_cols))
-    # Define reactive value that counts manual IDs (to prevent duplicates when
-    # inserting/deleting)
     id_counter = reactive.Value(1)
 
-    # These are the values we will expose to the main app
     output_data = reactive.Value(None)
     output_is_custom = reactive.Value(False)
 
-    # --- HELPERS ---
-
     def _ensure_id(df):
-        """Ensures ID column exists and is first"""
         if df is None: return None
         if 'ID' not in df.columns:
             df.insert(0, 'ID', range(1, len(df) + 1))
@@ -139,32 +167,22 @@ def server(input: Inputs, output: Outputs, session: Session, example_raw_data):
             df = df[cols]
         return df
 
-    # --- HANDLERS ---
-
     @reactive.Effect
     @reactive.event(input.btn_add_form)
     def _add_patient():
         current_df = form_df()
         new_id = id_counter()
 
-        new_row = pd.DataFrame([{
-            'ID': new_id,
-            'Age': float(input.in_age()),
-            'Gender': input.in_gender(),
-            'BMI': float(input.in_bmi()),
-            'Tumor size (cm)': float(input.in_tumor_size()),
-            'Tumor stage': input.in_tumor_stage(),
-            'Node stage': input.in_node_stage(),
-            'Metastases': input.in_metastases(),
-            'ATA risk': input.in_ata_risk(),
-            'Histology': input.in_histology(),
-            'ETE': input.in_ete(),
-            'Multifocality': input.in_multifocality(),
-            'Vascular invasion': input.in_vascular_invasion(),
-            'Resection': input.in_resection(),
-            'Goal of RAI': input.in_goal_of_rai()
-        }])
+        row_data = {'ID': new_id}
+        for input_id, feat_name in labels_dict.items():
+            val = getattr(input, input_id, None)()
+            if val is not None:
+                if isinstance(val, str):
+                    row_data[feat_name] = val
+                else:
+                    row_data[feat_name] = float(val)
 
+        new_row = pd.DataFrame([row_data])
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
         form_df.set(updated_df)
         id_counter.set(new_id + 1)
@@ -173,35 +191,31 @@ def server(input: Inputs, output: Outputs, session: Session, example_raw_data):
     @reactive.Effect
     @reactive.event(input.btn_delete_selected)
     def _delete_patient():
-        # Get indices of selected rows (returns a tuple of integers)
         selected_rows = input.out_patient_table_selected_rows()
         if not selected_rows:
             ui.notification_show("No rows selected.", type="warning")
             return
-            
-        current_df = form_df.get()        
-        updated_df = current_df.drop(index=list(selected_rows)).reset_index(drop=True) # drop rows by integer index
+
+        current_df = form_df.get()
+        updated_df = current_df.drop(index=list(selected_rows)).reset_index(drop=True)
         form_df.set(updated_df)
         ui.notification_show(f"Deleted {len(selected_rows)} patient(s).", type="message")
 
-    # --- PIPELINE ---
-
     @reactive.Effect
     def _update_output_pipeline():
-        """
-        Determines which dataset to show
-        """
         method = str(input.input_method())
         raw_df = None
         is_custom = False
 
+        md = model_data.get()
+        example_raw_data = md.get("X_TEST_RAW")
+
         if method == "example":
-            # Example data is already processed, so we just use it
-            raw_df = example_raw_data.copy()
+            if example_raw_data is not None:
+                raw_df = example_raw_data.copy()
             is_custom = False
-        
+
         elif method == "form":
-            # For forms, we need to process the raw inputs into model features
             raw_df = form_df.get()
             is_custom = True
 
@@ -209,11 +223,10 @@ def server(input: Inputs, output: Outputs, session: Session, example_raw_data):
             file_info = input.input_dataset_file()
             is_custom = True
             if not file_info:
-                # If no file uploaded yet, show empty table
                 output_data.set(None)
                 output_is_custom.set(is_custom)
                 return
-            
+
             file_path = file_info[0]["datapath"]
             try:
                 if file_path.endswith(".csv"):
@@ -225,21 +238,17 @@ def server(input: Inputs, output: Outputs, session: Session, example_raw_data):
                 else:
                     raise ValueError("Unsupported file format!")
                 raw_df = clean_data(df)
-
             except Exception as e:
                 ui.notification_show(f"Error reading file: {e}", type="error")
                 raw_df = None
-                return None
 
-        # Final Standardization for the App
         if raw_df is not None and not raw_df.empty:
             clean_df = _ensure_id(raw_df)
             output_data.set(clean_df)
         else:
             output_data.set(None)
-            
+
         output_is_custom.set(is_custom)
-        return
 
     @output
     @render.data_frame
@@ -253,21 +262,13 @@ def server(input: Inputs, output: Outputs, session: Session, example_raw_data):
                 selection_mode="none"
             )
 
-        # Process column names so that they have spaces
         display_df.columns = [c.replace('_', ' ') for c in display_df.columns]
-
-        # Ensure the column ID exists
         display_df = _ensure_id(display_df)
-
-        # Round values for visualization in the UI
-        for col in ["Age", "BMI", "Tumor size (cm)"]:
-            if col in display_df.columns:
-                display_df[col] = display_df[col].astype(float).round(2)
 
         return render.DataGrid(
             display_df,
             width="100%",
-            selection_mode="rows" # enables the checkbox/click selection
+            selection_mode="rows"
         )
 
     return {"data": output_data, "is_custom": output_is_custom}
