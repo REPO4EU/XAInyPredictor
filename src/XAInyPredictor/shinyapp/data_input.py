@@ -75,10 +75,6 @@ def build_form_fields(config: dict) -> tuple:
                 current_column = []
                 column_count += 1
 
-    col_widths = []
-    for _ in range(len(columns)):
-        col_widths.append(12 // len(columns) if len(columns) > 0 else 12)
-
     return columns, labels_dict
 
 
