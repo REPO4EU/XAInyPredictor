@@ -81,22 +81,22 @@ def build_page_header(config: dict, current_use_case: str):
                 ),
                 id="div-navbar-plot",
             ),
+            ui.tags.div(
+                ui.input_select(
+                    id="use_case_selector",
+                    label=None,
+                    choices=use_case_choices,
+                    selected=current_use_case,
+                ),
+                style="display: flex; align-items: center; margin-left: 10px;"
+            ),
             id="div-navbar-tabs",
             class_="navigation-menu",
         ),
         ui.tags.div(
-            ui.input_select(
-                id="use_case_selector",
-                label=None,
-                choices=use_case_choices,
-                selected=current_use_case,
-            ),
-            style="display: flex; align-items: center; margin-left: 10px;"
-        ),
-        ui.tags.div(
             ui.tags.a(
                 ui.tags.img(src="static/img/repo4eu_small_logo.png", height="40px"),
-                href="https://repo4.eu/",
+                href="https://repo4eu/",
                 target="_blank",
             ),
             id="logo-right",
@@ -156,6 +156,7 @@ def build_ui(config: dict, current_use_case: str):
 def load_model_data(use_case_name: str):
     use_case_data = load_use_case(use_case_name)
     config = use_case_data["config"]
+    encoding_dict = config.get("encoding", {})
     example_raw_df = use_case_data["example_data"].copy()
     feature_order = use_case_data["feature_order"]
 
@@ -164,9 +165,16 @@ def load_model_data(use_case_name: str):
     formula_file = use_case_path / "feature_order.txt"
 
     target_col = config.get("target_column", "target")
-    example_proc_df = process_raw_data(raw_df=example_raw_df.copy(), output_file=None, target=target_col)
+    allowed_columns = [f["name"] for f in config.get("features", [])]
+    example_proc_df = process_raw_data(
+        raw_df=example_raw_df.copy(),
+        output_file=None,
+        encoding_config=encoding_dict,
+        target=target_col,
+        allowed_columns=allowed_columns,
+    )
 
-    example_raw_df = clean_data(example_raw_df)
+    example_raw_df = clean_data(example_raw_df, allowed_columns)
     example_raw_df['ID'] = [i + 1 for i in example_raw_df.index]
     example_proc_df['ID'] = [i + 1 for i in example_proc_df.index]
 
@@ -257,6 +265,9 @@ def server(input, output, session: Session):
             x_test_reactive.set(new_model_data["X_TEST"])
             prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
             data_available.set(True)
+
+            session.send_custom_message("set_input_value", {"id": "use_case_selector", "value": selected_use_case})
+
             ui.modal_remove()
 
     @reactive.Effect
@@ -328,10 +339,12 @@ def server(input, output, session: Session):
         data_available.set(True)
 
         if is_custom:
+            allowed_columns = [f["name"] for f in cfg.get("features", [])]
             current_proc_df = process_raw_form_data(
                 raw_df=current_df,
                 example_raw_df=md["example_raw_df"],
-                encoding_config=cfg.get("encoding", {})
+                encoding_config=cfg.get("encoding", {}),
+                allowed_columns=allowed_columns
             )
             current_proc_df.columns = [col.replace(' ', '_') for col in current_proc_df.columns]
             d_test_curr = delta_xai(md.get("delta_formula"), current_proc_df, md["FEATURE_ORDER_CLEAN"])

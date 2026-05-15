@@ -116,7 +116,7 @@ def data_input_ui(config=None):
             "input.input_method == 'form'",
             ui.card(
                 ui.card_header(ui.tags.b("➕ " + (labels.get("form", {}).get("add_patient_button", "New Patient Entry")))),
-                ui.layout_columns(*form_columns, col_widths=tuple([4] * len(form_columns))) if form_columns else ui.p("No features configured."),
+                ui.output_ui("form_fields"),
                 ui.card_footer(
                     ui.input_action_button("btn_add_form", labels.get("form", {}).get("add_patient_button", "Add Patient to Cohort"), class_="btn-primary", width="100%")
                 )
@@ -138,22 +138,28 @@ def data_input_ui(config=None):
 
 @module.server
 def server(input: Inputs, output: Outputs, session: Session, model_data, config_init, config_reactive=None):
-    cfg = config_init if config_init else {}
-    features = cfg.get("features", [])
-
-    labels_dict = {}
-
-    if features:
-        feature_cols = [f["name"] for f in features]
-        for f in features:
-            feat_name = f.get("name", "")
-            input_id = f"in_{feat_name.replace(' ', '_').replace('(', '').replace(')', '')}"
-            labels_dict[input_id] = feat_name
-    else:
-        feature_cols = ['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk', 'Histology', 'ETE', 'Multifocality', 'Vascular invasion', 'Resection', 'Goal of RAI']
-
-    form_df = reactive.Value(pd.DataFrame(columns=['ID'] + feature_cols))
+    labels_dict = reactive.Value({})
+    feature_cols = reactive.Value([])
+    form_df = reactive.Value(pd.DataFrame())
     id_counter = reactive.Value(1)
+
+    @reactive.Effect
+    def _rebuild_fields():
+        current_cfg = config_reactive.get() if config_reactive else config_init
+        features = current_cfg.get("features", []) if current_cfg else []
+
+        new_labels = {}
+        new_cols = []
+        if features:
+            new_cols = [f["name"] for f in features]
+            for f in features:
+                feat_name = f.get("name", "")
+                input_id = f"in_{feat_name.replace(' ', '_').replace('(', '').replace(')', '')}"
+                new_labels[input_id] = feat_name
+
+        labels_dict.set(new_labels)
+        feature_cols.set(new_cols)
+        form_df.set(pd.DataFrame(columns=['ID'] + new_cols))
 
     output_data = reactive.Value(None)
     output_is_custom = reactive.Value(False)
@@ -170,11 +176,12 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     @reactive.Effect
     @reactive.event(input.btn_add_form)
     def _add_patient():
-        current_df = form_df()
+        current_df = form_df.get()
         new_id = id_counter()
+        current_labels = labels_dict.get()
 
         row_data = {'ID': new_id}
-        for input_id, feat_name in labels_dict.items():
+        for input_id, feat_name in current_labels.items():
             val = getattr(input, input_id, None)()
             if val is not None:
                 if isinstance(val, str):
@@ -249,6 +256,17 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
             output_data.set(None)
 
         output_is_custom.set(is_custom)
+
+    @output
+    @render.ui
+    def form_fields():
+        current_cfg = config_reactive.get() if config_reactive else config_init
+        form_columns, _ = build_form_fields(current_cfg or {})
+        if form_columns:
+            return ui.layout_columns(
+                *form_columns, col_widths=tuple([4] * len(form_columns))
+            )
+        return ui.p("No features configured.")
 
     @output
     @render.data_frame
