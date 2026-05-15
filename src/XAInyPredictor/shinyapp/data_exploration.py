@@ -10,18 +10,9 @@ def data_exploration_ui(config=None):
     if config is None:
         config = {}
 
-    features = config.get("features", [])
-    feature_choices = [f["display_name"] for f in features] if features else ['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk']
-    default_feature = feature_choices[0] if feature_choices else 'Age'
-
     return ui.layout_sidebar(
         ui.sidebar(
-            ui.input_select(
-                id="feature_to_plot",
-                label="Feature to plot:",
-                choices=feature_choices,
-                selected=default_feature,
-            ),
+            ui.output_ui("feature_dropdown"),
             ui.input_select(
                 id="reference_data",
                 label= ui.div(
@@ -74,6 +65,29 @@ def data_exploration_ui(config=None):
 
 @module.server
 def server(input: Inputs, output: Outputs, session: Session, global_input_data, model_data, patient_selected_id, config_init=None, config_reactive=None):
+
+    display_to_name = reactive.Value({})
+
+    @reactive.Effect
+    def _rebuild_feature_list():
+        current_cfg = config_reactive.get() if config_reactive else (config_init or {})
+        features = current_cfg.get("features", []) if current_cfg else []
+        display_to_name.set({f["display_name"]: f["name"] for f in features})
+
+    @output
+    @render.ui
+    def feature_dropdown():
+        current_cfg = config_reactive.get() if config_reactive else (config_init or {})
+        features = current_cfg.get("features", []) if current_cfg else []
+        choices = [(f["display_name"], f["display_name"]) for f in features]
+        if not choices:
+            return ui.p("No features configured", style="font-size: 0.85em; color: gray;")
+        return ui.input_select(
+            id="feature_to_plot",
+            label="Feature to plot:",
+            choices=dict(choices),
+            selected=features[0].get("display_name") if features else None,
+        )
 
     @output
     @render.ui
@@ -152,8 +166,16 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         
         # Ensure column names have the proper format for the UI
         df.columns = [col.replace('_', ' ') for col in df.columns]
-        
-        feature = str(input.feature_to_plot())
+
+        display_name = str(input.feature_to_plot())
+        col_name = display_to_name.get().get(display_name, display_name)
+        # Also try with space replacement as fallback
+        if col_name not in df.columns:
+            col_name_alt = col_name.replace(' ', '_')
+            if col_name_alt in [c.replace(' ', '_') for c in df.columns]:
+                col_name = col_name_alt
+
+        feature = col_name
         if feature not in df.columns:
             return ui.p("Feature not found")
         
@@ -201,10 +223,16 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         
         # Ensure column names have the proper format for the UI
         df.columns = [col.replace('_', ' ') for col in df.columns]
-        feature = str(input.feature_to_plot())
-        patient_id = patient_selected_id.get() # use the global ID
+        display_name = str(input.feature_to_plot())
+        col_name = display_to_name.get().get(display_name, display_name)
+        if col_name not in df.columns:
+            col_name_alt = col_name.replace(' ', '_')
+            if col_name_alt in [c.replace(' ', '_') for c in df.columns]:
+                col_name = col_name_alt
 
-        # Check if feature exists
+        feature = col_name
+        patient_id = patient_selected_id.get()
+
         if feature not in df.columns:
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.set_axis_off()
