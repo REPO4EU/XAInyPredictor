@@ -264,7 +264,6 @@ def server(input, output, session: Session):
             delta_test_reactive.set(new_model_data["D_TEST"])
             x_test_reactive.set(new_model_data["X_TEST"])
             prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
-            data_available.set(True)
 
             session.send_custom_message("set_input_value", {"id": "use_case_selector", "value": selected_use_case})
 
