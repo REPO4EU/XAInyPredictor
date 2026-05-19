@@ -328,7 +328,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         Gathers all the dataframes and IDs needed for analysis.
         Returns a dictionary of data or None if invalid.
         """
-        df = global_input_data.get()
+        raw_df = global_input_data.get()
         delta_test = delta_test_reactive.get()
         x_test = x_test_reactive.get()
         patient_id = patient_selected_id.get()
@@ -342,14 +342,15 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         y_train = md.get("Y_TRAIN")
 
         # Validation checks
-        if any((x is None) or (isinstance(x, pd.DataFrame) and x.empty) for x in [df, delta_train, delta_test, x_train, y_train, patient_id]):
+        if any((x is None) or (isinstance(x, pd.DataFrame) and x.empty) for x in [raw_df, delta_train, delta_test, x_train, y_train, patient_id]):
             return None
 
-        all_ids = sorted(df['ID'].astype(int).tolist())
+        all_ids = sorted(raw_df['ID'].astype(int).tolist())
         if patient_id == None or int(patient_id) not in all_ids:
             return None
 
         # Standardize columns
+        df = raw_df.copy()
         df.columns = [col.replace(' ', '_') for col in df.columns]
 
         # Encode y_train to 1/0

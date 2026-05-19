@@ -279,6 +279,7 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
                 selection_mode="none"
             )
 
+        display_df = display_df.copy()
         display_df.columns = [c.replace('_', ' ') for c in display_df.columns]
         display_df = _ensure_id(display_df)
 

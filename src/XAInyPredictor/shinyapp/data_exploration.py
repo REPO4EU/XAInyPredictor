@@ -181,6 +181,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             return ui.p("No data available")
         
         # Ensure column names have the proper format for the UI
+        df = df.copy()
         df.columns = [col.replace('_', ' ') for col in df.columns]
 
         display_name = str(input.feature_to_plot())
@@ -238,6 +239,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             return fig
         
         # Ensure column names have the proper format for the UI
+        df = df.copy()
         df.columns = [col.replace('_', ' ') for col in df.columns]
         display_name = str(input.feature_to_plot())
         col_name = display_to_name.get().get(display_name, display_name)
