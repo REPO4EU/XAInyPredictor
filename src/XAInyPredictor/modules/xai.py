@@ -183,7 +183,9 @@ def analyze_patient(
         show_closest_radial=True,
         show_average_radial=True,
         show_average_class0_radial=True,
-        show_average_class1_radial=True
+        show_average_class1_radial=True,
+        neg_class_label="Negative",
+        pos_class_label="Positive",
     ):
 
     print(f"Analyzing patient {patient_id}")
@@ -249,12 +251,12 @@ def analyze_patient(
 
         # Plot the average for class 0
         if show_average_class0_radial:
-            _ = ax.plot(theta, avg_proba_class0, label='Avg. negative', color='g')
+            _ = ax.plot(theta, avg_proba_class0, label=f'Avg. {neg_class_label}', color='g')
             #ax.fill(theta, avg_proba_class0, alpha=0.1, color='g')
 
         # Plot the average for class 1
         if show_average_class1_radial:
-            _ = ax.plot(theta, avg_proba_class1, label='Avg. positive', color='yellow')
+            _ = ax.plot(theta, avg_proba_class1, label=f'Avg. {pos_class_label}', color='yellow')
             #ax.fill(theta, avg_proba_class1, alpha=0.1, color='yellow')
 
         # Prepare for individual patient plotting
