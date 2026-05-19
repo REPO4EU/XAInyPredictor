@@ -191,8 +191,8 @@ encoding:
     THERAPEUTIC: 3
 
 labels:
-  positive_class: "Refractory"
-  negative_class: "Non-Refractory"
+  positive_class_label: "Refractory"
+  negative_class_label: "Non-Refractory"
   probability_column: "Probability"
   class_column: "Classification"
   form:
