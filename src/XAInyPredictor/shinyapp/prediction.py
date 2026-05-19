@@ -4,7 +4,7 @@ import pandas as pd
 from shiny import Inputs, Outputs, Session, module, reactive, render, ui
 
 # Local imports
-from XAInyPredictor.modules.analyzer import analyze_patient, threshold_for_target_fnr
+from XAInyPredictor.modules.xai import analyze_patient, threshold_for_target_fnr
 
 
 @module.ui
@@ -106,7 +106,34 @@ def prediction_ui(config=None):
 
 @module.server
 def server(input: Inputs, output: Outputs, session: Session, global_input_data, patient_selected_id, model_data, delta_test_reactive, x_test_reactive, prob_threshold, config_init, config_reactive=None):
-    cfg = config_init if config_init else {}
+
+    @reactive.Calc
+    def current_labels():
+        current_cfg = config_reactive.get() if config_reactive else (config_init or {})
+        labels = current_cfg.get("labels", {})
+        return {
+            "positive_class": labels.get("positive_class", "Positive"),
+            "negative_class": labels.get("negative_class", "Negative"),
+            "probability_column": labels.get("probability_column", "Probability"),
+            "class_column": labels.get("class_column", "Class")
+        }
+
+    @reactive.Effect
+    def _update_sidebar_labels():
+        lbls = current_labels()
+        neg = lbls["negative_class"]
+        pos = lbls["positive_class"]
+        
+        ui.update_checkbox_group(
+            "radar_plot_elements",
+            choices={
+                "closest": "Closest patients",
+                "average": "Average all patients",
+                "average_0": f"Avg. {neg}",
+                "average_1": f"Avg. {pos}",
+            },
+            selected=list(input.radar_plot_elements()) if input.radar_plot_elements() else ["closest", "average", "average_0", "average_1"]
+        )
 
     @output
     @render.ui
@@ -170,7 +197,11 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
     def dynamic_plot_container():
         mode = input.view_mode()
         selected_features = input.features_to_plot()
-        
+
+        lbls = current_labels()
+        neg = lbls["negative_class"]
+        pos = lbls["positive_class"]
+
         # Calculate dynamic height for Curve plot
         # Base height + (pixels per feature * number of features)
         n_feats = len(selected_features) if selected_features else 0
@@ -185,11 +216,11 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                         ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
                         ui.tags.div(
                             ui.tags.b("Understanding the radar plot:"),
-                            ui.tags.p("The radar plot compares the values of the features from a selected patient with three different distributions:"),
+                            ui.tags.p("The radar plot compares the values of the features from a selected patient (red) with three different distributions:"),
                             ui.tags.ul(
-                                ui.tags.li(ui.tags.b("Average all patients:"), " The average values from all patients in the model."),
-                                ui.tags.li(ui.tags.b("Avg. RAI-R negative:"), " The average values from all RAI-R negative patients in the model (green)."),
-                                ui.tags.li(ui.tags.b("Avg. RAI-R positive:"), " The average values from all RAI-R positive patients in the model (red)."),
+                                ui.tags.li(ui.tags.b("Average all patients:"), " The average values from all patients in the model (blue)."),
+                                ui.tags.li(ui.tags.b(f"Avg. {neg}:"), f" The average values from all {neg} patients in the model (green)."),
+                                ui.tags.li(ui.tags.b(f"Avg. {pos}:"), f" The average values from all {pos} patients in the model (yellow)."),
                             ),
                             ui.tags.p("Comparing these values help to evaluate if a patient has been correctly classified or not."),
                             style="width: 250px;"
@@ -338,6 +369,9 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         if len(feats) < 3:
             return _empty_plot("Please, select at least 3 features to view")
 
+        # Fetch current labels reactively
+        lbls = current_labels()
+
         # We call the plotting function INSIDE render.plot
         # This ensures it redraws correctly on resize.
         fig_radar, _ = analyze_patient(
@@ -354,6 +388,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             show_average_radial="average" in opts,
             show_average_class0_radial="average_0" in opts,
             show_average_class1_radial="average_1" in opts,
+            neg_class_label=lbls["negative_class"],
+            pos_class_label=lbls["positive_class"],
         )
         return fig_radar if fig_radar else _empty_plot("Radar data unavailable")
 
@@ -368,6 +404,9 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         if len(feats) < 3:
             return _empty_plot("Please, select at least 3 features to view")
 
+        # Fetch current labels reactively
+        lbls = current_labels()
+
         # Retrieve the second figure (Curve) from the function
         # Note: Ideally you'd split analyze_patient into two functions to save performance,
         # but calling it again here is the safest way to ensure the plot exists for this context.
@@ -381,6 +420,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             x_test=data["x_test"],
             features_to_plot=feats,
             n_dists=3,
+            neg_class_label=lbls["negative_class"],
+            pos_class_label=lbls["positive_class"],
             # We don't care about radar options here
         )
         return fig_curve if fig_curve else _empty_plot("Curve data unavailable")
@@ -399,12 +440,12 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         sel_id = patient_selected_id.get()
         prob_thr = prob_threshold.get()
 
-        cfg = config_init if config_init else {}
-        labels = cfg.get("labels", {})
-        pos_class = labels.get("positive_class", "YES")
-        neg_class = labels.get("negative_class", "NO")
-        prob_col = labels.get("probability_column", "Probability")
-        class_col = labels.get("class_column", "Class")
+        # Fetch current labels reactively
+        lbls = current_labels()
+        pos_class = lbls["positive_class"]
+        neg_class = lbls["negative_class"]
+        prob_col = lbls["probability_column"]
+        class_col = lbls["class_column"]
 
         if df is None or delta_test is None or df.empty or delta_test.empty:
             return render.DataGrid(
