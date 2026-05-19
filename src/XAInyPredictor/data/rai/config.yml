@@ -89,8 +89,8 @@ features:
     display_name: "Extrathyroidal Extension (ETE)"
     input_type: "select"
     values:
-      - YES
-      - NO
+      - "YES"
+      - "NO"
     default: "NO"
     help_text: "Microscopic or Gross extension beyond the thyroid capsule."
   - name: "Multifocality"
@@ -98,16 +98,16 @@ features:
     display_name: "Multifocality"
     input_type: "select"
     values:
-      - YES
-      - NO
+      - "YES"
+      - "NO"
     default: "NO"
   - name: "Vascular invasion"
     type: "categorical"
     display_name: "Vascular Invasion"
     input_type: "select"
     values:
-      - YES
-      - NO
+      - "YES"
+      - "NO"
     default: "NO"
   - name: "Resection"
     type: "categorical"
@@ -169,14 +169,14 @@ encoding:
     Mx: 0
     M1: 1
   ETE:
-    NO: 0
-    YES: 1
+    "NO": 0
+    "YES": 1
   Multifocality:
-    NO: 0
-    YES: 1
+    "NO": 0
+    "YES": 1
   Vascular invasion:
-    NO: 0
-    YES: 1
+    "NO": 0
+    "YES": 1
   Resection:
     R0: 0
     R1: 1
