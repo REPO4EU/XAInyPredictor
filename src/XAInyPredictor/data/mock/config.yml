@@ -88,8 +88,8 @@ encoding:
     Good: 2
 
 labels:
-  positive_class: "High Risk"
-  negative_class: "Low Risk"
+  positive_class_label: "High Risk"
+  negative_class_label: "Low Risk"
   probability_column: "Risk Probability"
   class_column: "Risk Level"
   form:
