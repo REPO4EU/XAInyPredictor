@@ -18,7 +18,6 @@ REQUIRED_FILES = ["config.yml", "model.pkl", "feature_order.txt", "example_data.
 
 def get_use_case_path(use_case_name: str) -> Path:
     base_dir = Path(__file__).parent.parent / "data" / use_case_name
-    print(base_dir)
     return base_dir
 
 
