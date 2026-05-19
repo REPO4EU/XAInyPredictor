@@ -157,6 +157,9 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
         feature_cols.set(new_cols)
         form_df.set(pd.DataFrame(columns=['ID'] + new_cols))
 
+        # Force the radio button back to form on use-case change
+        ui.update_radio_buttons("input_method", selected="form")
+
     output_data = reactive.Value(None)
     output_is_custom = reactive.Value(False)
 
