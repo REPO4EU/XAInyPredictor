@@ -89,6 +89,22 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             selected=features[0].get("display_name") if features else None,
         )
 
+    @reactive.Effect
+    def _ensure_valid_patient():
+        """
+        Whenever data changes, ensure the selected patient is valid.
+        If it's None or not in the new dataset, default to the first ID.
+        """
+        df = global_input_data.get()
+        if df is None or df.empty or 'ID' not in df.columns:
+            return
+        
+        current_id = patient_selected_id.get()
+        all_ids = sorted(df['ID'].astype(int).tolist())
+        
+        if current_id is None or int(current_id) not in all_ids:
+            patient_selected_id.set(all_ids[0])
+
     @output
     @render.ui
     def patient_selector_ui():
