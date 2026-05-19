@@ -16,8 +16,8 @@ def prediction_ui(config=None):
     labels = config.get("labels", {})
     help_texts = config.get("help_texts", {})
 
-    pos_class = labels.get("positive_class", "Positive")
-    neg_class = labels.get("negative_class", "Negative")
+    pos_class_label = labels.get("positive_class_label", "Positive")
+    neg_class_label = labels.get("negative_class_label", "Negative")
     prob_col = labels.get("probability_column", "Probability")
     class_col = labels.get("class_column", "Class")
 
@@ -66,8 +66,8 @@ def prediction_ui(config=None):
                     choices={
                         "closest": "Closest patients",
                         "average": "Average all patients",
-                        "average_0": f"Avg. {neg_class}",
-                        "average_1": f"Avg. {pos_class}",
+                        "average_0": f"Avg. {neg_class_label}",
+                        "average_1": f"Avg. {pos_class_label}",
                     },
                     selected=["closest", "average", "average_0", "average_1"],
                 ),
@@ -86,7 +86,7 @@ def prediction_ui(config=None):
                                     ui.tags.p("The table shows the predictions of the model:"),
                                     ui.tags.ul(
                                         ui.tags.li(ui.tags.b(f"{prob_col}:"), f" Indicates the probability. The higher, the more likely."),
-                                        ui.tags.li(ui.tags.b(f"{class_col}:"), f" Classifies as {pos_class} or {neg_class}."),
+                                        ui.tags.li(ui.tags.b(f"{class_col}:"), f" Classifies as {pos_class_label} or {neg_class_label}."),
                                     ),
                                     style="width: 250px;"
                                 ),
@@ -112,8 +112,10 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         current_cfg = config_reactive.get() if config_reactive else (config_init or {})
         labels = current_cfg.get("labels", {})
         return {
-            "positive_class": labels.get("positive_class", "Positive"),
-            "negative_class": labels.get("negative_class", "Negative"),
+            "positive_class": current_cfg.get("positive_class", "YES"),
+            "negative_class": current_cfg.get("negative_class", "NO"),
+            "positive_class_label": labels.get("positive_class_label", "Positive"),
+            "negative_class_label": labels.get("negative_class_label", "Negative"),
             "probability_column": labels.get("probability_column", "Probability"),
             "class_column": labels.get("class_column", "Class")
         }
@@ -121,8 +123,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
     @reactive.Effect
     def _update_sidebar_labels():
         lbls = current_labels()
-        neg = lbls["negative_class"]
-        pos = lbls["positive_class"]
+        neg = lbls["negative_class_label"]
+        pos = lbls["positive_class_label"]
         
         ui.update_checkbox_group(
             "radar_plot_elements",
@@ -199,8 +201,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         selected_features = input.features_to_plot()
 
         lbls = current_labels()
-        neg = lbls["negative_class"]
-        pos = lbls["positive_class"]
+        neg = lbls["negative_class_label"]
+        pos = lbls["positive_class_label"]
 
         # Calculate dynamic height for Curve plot
         # Base height + (pixels per feature * number of features)
@@ -301,11 +303,16 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         except ValueError:
             return
 
+        # Encode y_test to 1/0
+        lbls = current_labels()
+        pos_class = lbls["positive_class"]
+        y_test_encoded = (y_test == pos_class).astype(int)
+
         # Calculate probability threshold
-        y_test.sort_index(inplace=True)
+        y_test_encoded.sort_index(inplace=True)
         delta_test.sort_index(inplace=True)
         threshold, fnr = threshold_for_target_fnr(
-            y_test.to_numpy(),
+            y_test_encoded.to_numpy(),
             delta_test['pred_prob'].to_numpy(),
             target_fnr=target_fnr
         )
@@ -345,13 +352,18 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         # Standardize columns
         df.columns = [col.replace(' ', '_') for col in df.columns]
 
+        # Encode y_train to 1/0
+        lbls = current_labels()
+        pos_class = lbls["positive_class"]
+        y_train_encoded = (y_train == pos_class).astype(int)
+
         return {
             "patient_id": patient_id,
             "df": df,
             "delta_train": delta_train,
             "delta_test": delta_test,
             "x_train": x_train,
-            "y_train": y_train,
+            "y_train": y_train_encoded,
             "x_test": x_test,
         }
 
@@ -388,8 +400,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             show_average_radial="average" in opts,
             show_average_class0_radial="average_0" in opts,
             show_average_class1_radial="average_1" in opts,
-            neg_class_label=lbls["negative_class"],
-            pos_class_label=lbls["positive_class"],
+            neg_class_label=lbls["negative_class_label"],
+            pos_class_label=lbls["positive_class_label"],
         )
         return fig_radar if fig_radar else _empty_plot("Radar data unavailable")
 
@@ -420,8 +432,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             x_test=data["x_test"],
             features_to_plot=feats,
             n_dists=3,
-            neg_class_label=lbls["negative_class"],
-            pos_class_label=lbls["positive_class"],
+            neg_class_label=lbls["negative_class_label"],
+            pos_class_label=lbls["positive_class_label"],
             # We don't care about radar options here
         )
         return fig_curve if fig_curve else _empty_plot("Curve data unavailable")
@@ -442,8 +454,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
         # Fetch current labels reactively
         lbls = current_labels()
-        pos_class = lbls["positive_class"]
-        neg_class = lbls["negative_class"]
+        pos_class_label = lbls["positive_class_label"]
+        neg_class_label = lbls["negative_class_label"]
         prob_col = lbls["probability_column"]
         class_col = lbls["class_column"]
 
@@ -460,7 +472,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         if "pred_prob" in delta_test.columns:
             res_df = pd.concat([res_df, delta_test[["pred_prob"]]], axis=1)
             res_df = res_df.rename(columns={"pred_prob": prob_col}).sort_values(by=['ID'])
-            res_df[class_col] = np.where(res_df[prob_col] >= prob_thr, pos_class, neg_class)
+            res_df[class_col] = np.where(res_df[prob_col] >= prob_thr, pos_class_label, neg_class_label)
 
         columns_to_show = "ID", prob_col, class_col
         final_cols = [col for col in columns_to_show if col in res_df.columns]
@@ -476,8 +488,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     width="100%"
                 )
             sel_id_row = int(res_df[res_df['ID'] == sel_id].index[0])
-            pos_rows = res_df[res_df[class_col] == pos_class].index.to_list()
-            neg_rows = res_df[res_df[class_col] == neg_class].index.to_list()
+            pos_rows = res_df[res_df[class_col] == pos_class_label].index.to_list()
+            neg_rows = res_df[res_df[class_col] == neg_class_label].index.to_list()
             table_styles = [
                 {
                     "rows": [sel_id_row],
