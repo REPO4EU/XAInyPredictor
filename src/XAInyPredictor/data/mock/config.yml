@@ -39,8 +39,8 @@ features:
     display_name: "Family History"
     input_type: "select"
     values:
-      - YES
-      - NO
+      - "YES"
+      - "NO"
     default: "NO"
   - name: "Smoking Status"
     type: "categorical"
@@ -72,8 +72,8 @@ features:
 
 encoding:
   Family History:
-    NO: 0
-    YES: 1
+    "NO": 0
+    "YES": 1
   Smoking Status:
     Never: 0
     Former: 1
