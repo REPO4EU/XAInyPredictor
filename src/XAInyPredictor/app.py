@@ -265,7 +265,7 @@ def server(input, output, session: Session):
             x_test_reactive.set(new_model_data["X_TEST"])
             prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
 
-            await session.send_custom_message("set_input_value", {"id": "use_case_selector", "value": selected_use_case})
+            ui.update_select("use_case_selector", selected=selected_use_case)
 
             ui.modal_remove()
 
