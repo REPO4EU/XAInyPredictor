@@ -243,7 +243,7 @@ def server(input, output, session: Session):
 
     @reactive.Effect
     @reactive.event(input.confirm_startup_use_case)
-    def _on_startup_confirm():
+    async def _on_startup_confirm():
         if input.startup_confirmed() == "yes" and not startup_initialized.get():
             selected_use_case = input.startup_use_case()
             startup_initialized.set(True)
@@ -265,7 +265,7 @@ def server(input, output, session: Session):
             x_test_reactive.set(new_model_data["X_TEST"])
             prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
 
-            session.send_custom_message("set_input_value", {"id": "use_case_selector", "value": selected_use_case})
+            await session.send_custom_message("set_input_value", {"id": "use_case_selector", "value": selected_use_case})
 
             ui.modal_remove()
 
@@ -289,7 +289,7 @@ def server(input, output, session: Session):
 
     @reactive.Effect
     @reactive.event(input.confirm_switch)
-    def _confirm_switch():
+    async def _confirm_switch():
         if input.use_case_confirm() == "cancel":
             return
 
@@ -308,7 +308,7 @@ def server(input, output, session: Session):
 
             ui.notification_show(f"Switched to {new_model_data['config'].get('name', new_use_case)}", type="message")
 
-            session.send_custom_message("toggleActiveTab", {"activeTab": "data_input"})
+            await session.send_custom_message("toggleActiveTab", {"activeTab": "data_input"})
 
             ui.modal_remove()
 
