@@ -5,11 +5,14 @@ from matplotlib.projections.polar import PolarAxes
 import matplotlib.pyplot as plt
 from matplotlib.spines import Spine
 from matplotlib.transforms import Affine2D
+import logging
 import numpy as np
 import pandas as pd
 import re
 from sklearn.model_selection import train_test_split
 import sympy  # See https://github.com/knottwill/CoxKAN/blob/main/reprod/results.ipynb
+
+logger = logging.getLogger(__name__)
 
 
 def split_data_with_known_target(input_df, target='class_target', test_split=0.2):
@@ -55,12 +58,12 @@ def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str
         formula = pd.read_pickle(f)
 
     # Show the formula saved
-    print(f"Logit 0 formula: {formula[0]}")
-    print(f"Logit 1 formula: {formula[1]}")
+    logger.debug("Logit 0 formula: %s", formula[0])
+    logger.debug("Logit 1 formula: %s", formula[1])
 
     # Simplify formula
     delta_formula = sympy.simplify(formula[1] - formula[0])
-    print(f"Delta formula simplified: {delta_formula}")
+    logger.debug("Delta formula simplified: %s", delta_formula)
 
     # Read best formula file and extract variables
     with open(current_best_formula_file, 'r') as f:
@@ -68,7 +71,7 @@ def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str
             if line.startswith('Variables:'):
                 feature_order = eval(line.strip().split(': ')[1])
     feature_mappings = {str(idx+1) : feat_name for idx, feat_name in enumerate(feature_order)}
-    print(f"Feature mappings: {'; '.join([f'x_{idx} = {feat_name}' for idx, feat_name in feature_mappings.items()])}")
+    logger.debug("Feature mappings: %s", '; '.join([f'x_{idx} = {feat_name}' for idx, feat_name in feature_mappings.items()]))
 
     # Get features in formula
     vars_in_formula = set(re.findall(r'x_(\d+)', str(delta_formula)))
@@ -188,7 +191,7 @@ def analyze_patient(
         pos_class_label="Positive",
     ):
 
-    print(f"Analyzing patient {patient_id}")
+    logger.debug("Analyzing patient %s", patient_id)
 
     # Get feature values from patient selected and save them in delta_patient
     patient_index = df[df['ID'] == int(patient_id)].index.to_list()[0]
@@ -284,7 +287,6 @@ def analyze_patient(
     # Revert again the order to have the right plot order
     feature_idx_inv = feature_idx[::-1]
     cols_vars = [delta_test.columns[i] for i in feature_idx_inv]
-    #print(cols_vars)
 
     n_feats = min(len(cols_vars), max_plot_curves)  # Number of features to show in the curves plot
     if n_feats > 0: # There is something to show
@@ -332,14 +334,14 @@ def analyze_patient_new(
         show_average_class1_radial=True
     ):
 
-    print(f"Analyzing patient {patient_id} with Enhanced Visualization...")
+    logger.debug("Analyzing patient %s with enhanced visualization.", patient_id)
 
     # --- 1. DATA PREPARATION ---
     
     # Locate patient
     patient_ids = df['ID'].astype(int).tolist()
     if int(patient_id) not in patient_ids:
-        print(f"Error: Patient {patient_id} not found.")
+        logger.debug("Patient %s not found.", patient_id)
         return None, None
         
     patient_index = df[df['ID'] == int(patient_id)].index[0]

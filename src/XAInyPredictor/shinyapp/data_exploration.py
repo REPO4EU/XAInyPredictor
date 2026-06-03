@@ -42,7 +42,7 @@ def data_exploration_ui(config=None):
                 ui.card(
                     ui.card_header(
                         ui.div(
-                            "Feature Distribution Analysis",
+                            "Cohort Feature Context",
                             ui.tooltip(
                                 ui.span(ui.tags.i(class_="glyphicon glyphicon-question-sign"), style="font-size: 0.8em; color: gray; margin-left: 5px;"),
                                 "Blue bars: Reference population distribution. Red dashed line: Selected patient's value.",
@@ -128,8 +128,6 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             selected_val = all_ids[0]
         else:
             selected_val = int(current_selection)
-        print(f"Patient selected (inspect): {selected_val}")
-
         return ui.input_selectize(
             id="local_patient_select",
             label="Select patient:",

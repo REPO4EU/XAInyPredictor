@@ -1,7 +1,11 @@
 """Module providing a shiny UI."""
-import pandas as pd
 from pathlib import Path
+
+import matplotlib
+import pandas as pd
 from shiny import App, reactive, Session, ui
+
+matplotlib.use("Agg")
 
 from XAInyPredictor.shinyapp import data_input, data_exploration, prediction
 from XAInyPredictor.modules.model_registry import discover_use_cases, load_use_case, UseCaseNotFoundError
@@ -27,7 +31,8 @@ def build_startup_modal():
     return ui.modal(
         ui.tags.div(
             ui.tags.h3("Select Use Case", style="color: #007bff; font-weight: bold; text-align: center;"),
-            ui.tags.p("Choose which prediction model to use:", style="text-align: center;"),
+            ui.tags.p("Patient stratification prototype for cohort-level clinical decision support research.", style="text-align: center; color: #5f6f7f;"),
+            ui.tags.p("Choose which patient stratification model to use:", style="text-align: center;"),
             ui.br(),
             ui.input_select(
                 id="startup_use_case",
@@ -49,9 +54,14 @@ def build_page_header(config: dict, current_use_case: str):
 
     return ui.tags.div(
         ui.tags.div(
-            ui.tags.h3(
-                config.get("titles", {}).get("app_title", "XAInyPredictor"),
-                style="margin: 0; color: #007bff; font-weight: 800; letter-spacing: -1px;"
+            ui.tags.div(
+                ui.tags.h3(
+                    config.get("titles", {}).get("app_title", "XAInyPredictor"),
+                ),
+                ui.tags.span(
+                    "Patient stratification prototype",
+                    class_="navigation-subtitle",
+                ),
             ),
             id="app-title",
             class_="navigation-title",
@@ -68,7 +78,7 @@ def build_page_header(config: dict, current_use_case: str):
             ui.tags.div(
                 ui.input_action_button(
                     id="tab_data_exploration",
-                    label=config.get("titles", {}).get("tab_data_exploration", "2. Data Exploration"),
+                    label=config.get("titles", {}).get("tab_data_exploration", "2. Cohort Context"),
                     class_="navbar-button",
                 ),
                 id="div-navbar-map",
@@ -76,7 +86,7 @@ def build_page_header(config: dict, current_use_case: str):
             ui.tags.div(
                 ui.input_action_button(
                     id="tab_prediction",
-                    label=config.get("titles", {}).get("tab_prediction", "3. Prediction"),
+                    label=config.get("titles", {}).get("tab_prediction", "3. Patient Stratification"),
                     class_="navbar-button",
                 ),
                 id="div-navbar-plot",
@@ -148,6 +158,10 @@ def build_ui(config: dict, current_use_case: str):
                 class_="page-main"
             ),
             class_="page-layout"
+        ),
+        ui.tags.div(
+            "Research prototype: clinical workflow utility and interpretation should be validated with clinical collaborators.",
+            class_="app-validation-footer",
         ),
         title=config.get("titles", {}).get("app_title", "XAInyPredictor"),
     )
@@ -231,6 +245,7 @@ def server(input, output, session: Session):
     patient_selected = reactive.Value(None)
     prob_threshold = reactive.Value(MODEL_DATA["DEFAULT_THRESHOLD"])
     data_available = reactive.Value(False)
+    pending_use_case = reactive.Value(None)
 
     delta_test_reactive = reactive.Value(MODEL_DATA["D_TEST"])
     x_test_reactive = reactive.Value(MODEL_DATA["X_TEST"])
@@ -276,24 +291,35 @@ def server(input, output, session: Session):
             return
         new_use_case = input.use_case_selector()
         if new_use_case and new_use_case != current_use_case.get():
+            pending_use_case.set(new_use_case)
+            ui.update_select("use_case_selector", selected=current_use_case.get())
             ui.modal_show(
                 ui.modal(
                     ui.tags.p("Switching use case will clear current data. Continue?"),
                     title="Confirm Use Case Change",
                     footer=ui.TagList(
-                        ui.modal_button("Cancel", onclick="Shiny.setInputValue('use_case_confirm', 'cancel');"),
-                        ui.input_action_button("confirm_switch", "Confirm", class_="btn-primary", onclick="Shiny.setInputValue('use_case_confirm', 'confirm');")
+                        ui.input_action_button("cancel_switch", "Cancel", class_="btn-default"),
+                        ui.input_action_button("confirm_switch", "Confirm", class_="btn-primary")
                     )
                 )
             )
 
     @reactive.Effect
+    @reactive.event(input.cancel_switch)
+    def _cancel_switch():
+        pending_use_case.set(None)
+        ui.update_select("use_case_selector", selected=current_use_case.get())
+        ui.modal_remove()
+
+    @reactive.Effect
     @reactive.event(input.confirm_switch)
     async def _confirm_switch():
-        if input.use_case_confirm() == "cancel":
+        new_use_case = pending_use_case.get()
+        if not new_use_case:
+            ui.update_select("use_case_selector", selected=current_use_case.get())
+            ui.modal_remove()
             return
 
-        new_use_case = input.use_case_selector()
         try:
             new_model_data = _load_model_data_cached(new_use_case)
             current_use_case.set(new_use_case)
@@ -305,6 +331,8 @@ def server(input, output, session: Session):
             prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
             data_available.set(False)
             patient_selected.set(None)
+            pending_use_case.set(None)
+            ui.update_select("use_case_selector", selected=new_use_case)
 
             ui.notification_show(f"Switched to {new_model_data['config'].get('name', new_use_case)}", type="message")
 
@@ -314,11 +342,8 @@ def server(input, output, session: Session):
 
         except (UseCaseNotFoundError, Exception) as e:
             ui.notification_show(f"Error loading use case: {e}", type="error")
-
-    @reactive.Effect
-    @reactive.event(input.btn_cancel_switch)
-    def _cancel_switch():
-        pass
+            pending_use_case.set(None)
+            ui.update_select("use_case_selector", selected=current_use_case.get())
 
     input_results = data_input.server("data_input", model_data, DEFAULT_CONFIG, config)
     analysis_data = input_results["data"]
@@ -407,11 +432,23 @@ def server(input, output, session: Session):
         cfg = config.get()
         labels = cfg.get("labels", {})
         titles = cfg.get("titles", {})
+        features = cfg.get("features", [])
+        threshold = float(prob_threshold.get()) if prob_threshold.get() is not None else 0
+        positive_label = labels.get("positive_class_label", cfg.get("positive_class", "Positive"))
+        negative_label = labels.get("negative_class_label", cfg.get("negative_class", "Negative"))
 
         m = ui.modal(
             ui.div(
                 ui.tags.h4(f"Welcome to {titles.get('app_title', 'XAInyPredictor')}", style="color: #007bff; font-weight: bold; margin-top: 0;"),
                 ui.p(cfg.get("description", ""), style="font-style: italic; color: #666;"),
+                ui.tags.div(
+                    ui.tags.b("Research prototype context"),
+                    ui.p(
+                        "This app supports patient stratification research by comparing patient-level inputs with a reference cohort and assigning a model-based patient group. Its workflow utility and interpretation should be validated with clinical collaborators.",
+                        style="margin: 6px 0 0;",
+                    ),
+                    style="background: #f4f9ff; border-left: 4px solid #007bff; padding: 10px 12px; margin: 10px 0;"
+                ),
                 ui.hr(),
 
                 ui.row(
@@ -427,7 +464,7 @@ def server(input, output, session: Session):
                     ui.column(2, ui.h1("2", style="background: #e9ecef; border-radius: 50%; width: 40px; height: 40px; text-align: center; line-height: 40px; font-size: 20px; color: #495057; margin: 0 auto;")),
                     ui.column(10,
                         ui.h5("Explore Features", style="font-weight: bold; margin-top: 5px;"),
-                        ui.p(f"In the ", ui.tags.b(titles.get('tab_data_exploration', 'Data Exploration')), " tab, compare patient features against the reference population.")
+                        ui.p(f"In the ", ui.tags.b(titles.get('tab_data_exploration', 'Cohort Context')), " tab, compare patient features against the reference population.")
                     )
                 ),
                 ui.br(),
@@ -435,21 +472,32 @@ def server(input, output, session: Session):
                 ui.row(
                     ui.column(2, ui.h1("3", style="background: #e9ecef; border-radius: 50%; width: 40px; height: 40px; text-align: center; line-height: 40px; font-size: 20px; color: #495057; margin: 0 auto;")),
                     ui.column(10,
-                        ui.h5("Run Prediction", style="font-weight: bold; margin-top: 5px;"),
-                        ui.p(f"Click ", ui.tags.b(titles.get('tab_prediction', 'Prediction')), f" to see the {labels.get('probability_column', 'Probability')}. Use the charts to identify which features are driving the prediction."),
+                        ui.h5("Review Stratification", style="font-weight: bold; margin-top: 5px;"),
+                        ui.p(f"Click ", ui.tags.b(titles.get('tab_prediction', 'Patient Stratification')), f" to see the {labels.get('probability_column', 'Stratification Score')} and assigned patient group. The current decision threshold is {threshold:.3f}. Use the charts to understand the patient's profile against the reference cohort."),
                         ui.tags.div(
-                            ui.tags.span(f"{labels.get('negative_class', 'Negative')}", style="background: #d1e7dd; color: #0f5132; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
-                            " = Low Risk | ",
-                            ui.tags.span(f"{labels.get('positive_class', 'Positive')}", style="background: #f8d7da; color: #842029; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
-                            " = High Risk",
+                            ui.tags.span(f"{negative_label}", style="background: #d1e7dd; color: #0f5132; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
+                            " = below threshold | ",
+                            ui.tags.span(f"{positive_label}", style="background: #f8d7da; color: #842029; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
+                            " = at or above threshold",
                             style="margin-top: 5px; font-size: 0.9em;"
                         )
                     )
                 ),
+                ui.br(),
+                ui.tags.div(
+                    ui.tags.b("Model summary"),
+                    ui.tags.ul(
+                        ui.tags.li(f"Use case: {cfg.get('name', 'Patient stratification model')}"),
+                        ui.tags.li(f"Target: {cfg.get('target_column', 'target')}"),
+                        ui.tags.li(f"Input variables: {len(features)}"),
+                        ui.tags.li(f"Patient groups: {negative_label} / {positive_label}"),
+                    ),
+                    style="background: #fff8e6; border: 1px solid #f1d28c; border-radius: 6px; padding: 10px 12px;"
+                ),
             ),
-            title="How to use this App",
+            title="Research Prototype Info",
             easy_close=True,
-            footer=ui.modal_button("Got it!"),
+            footer=ui.modal_button("Close"),
             size="l"
         )
         ui.modal_show(m)

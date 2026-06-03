@@ -1,5 +1,12 @@
 name: "Diabetes Risk Predictor"
 description: "Predict risk of Type 2 Diabetes development based on clinical parameters"
+model_metadata:
+  model_version: "Demo prototype"
+  training_date: "Synthetic demonstration dataset"
+  cohort_source: "Mock reference cohort for workflow demonstration"
+  intended_use: "Demonstrate the patient stratification workflow on a simple risk use case"
+  validation_status: "Clinical usefulness should be validated with domain experts before real-world deployment"
+  limitations: "Demo use case with synthetic/example data; not intended to represent a validated diabetes model"
 
 target_column: "Diabetes-Risk"
 positive_class: "High"
@@ -14,7 +21,7 @@ features:
     default: 45
   - name: "BMI"
     type: "numeric"
-    display_name: "BMI (kg/m²)"
+    display_name: "BMI (kg/m2)"
     input_type: "numeric"
     min: 15
     max: 60
@@ -90,8 +97,8 @@ encoding:
 labels:
   positive_class_label: "High Risk"
   negative_class_label: "Low Risk"
-  probability_column: "Risk Probability"
-  class_column: "Risk Level"
+  probability_column: "Stratification Score"
+  class_column: "Patient Group"
   form:
     add_patient_button: "Add Patient to Cohort"
     delete_selected_button: "Delete Selected"
@@ -99,18 +106,20 @@ labels:
 titles:
   app_title: "XAInyPredictor"
   tab_data_input: "1. Data Input"
-  tab_data_exploration: "2. Data Exploration"
-  tab_prediction: "3. Prediction"
+  tab_data_exploration: "2. Cohort Context"
+  tab_prediction: "3. Patient Stratification"
   data_source: "Data Source"
   select_method: "Select Method:"
   manual_entry: "Manual Entry"
   upload_file: "Upload File"
   example_cohort: "Example Cohort"
-  feature_analysis: "Risk Analysis"
-  distance_analysis: "Feature Analysis"
-  prediction_results: "Risk Assessment"
+  feature_analysis: "Patient Profile Comparison"
+  feature_analysis_short: "Profile Comparison"
+  distance_analysis: "Feature Context Curves"
+  distance_analysis_short: "Feature Curves"
+  prediction_results: "Stratification Results"
 help_texts:
-  fnr_threshold: "Adjust the sensitivity of the risk assessment."
+  fnr_threshold: "Adjust how many high-risk patients the model is allowed to miss when assigning patient groups."
   fnr_zero: "Classify all high-risk patients regardless of probability (high sensitivity)."
   fnr_higher: "Focus on high-confidence predictions (high specificity)."
   reference_population_input: "Show distribution of your patient data."
