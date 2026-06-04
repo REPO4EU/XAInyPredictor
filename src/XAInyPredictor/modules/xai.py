@@ -36,12 +36,12 @@ def split_data_with_known_target(input_df, target='class_target', test_split=0.2
     return x_train, x_test, y_train, y_test
 
 
-def read_delta_rai_formula(formula_pkl_file: str, current_best_formula_file: str):
+def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str):
     """
-    Reads the RAI output pickle file formula.pkl, which contains the formula of
-    the RAI model, and simplifies it using the package sympy. Reads the file
+    Reads the XAI output pickle file formula.pkl, which contains the formula of
+    the XAI model, and simplifies it using the package sympy. Reads the file
     current_best_formula.txt and extracts the features names.
-    :param formula_pkl_file: Path to the Pickle file where the RAI formula is
+    :param formula_pkl_file: Path to the Pickle file where the XAI formula is
         stored.
     :param current_best_formula_file: Path to the file where the variable names
         are extracted.
@@ -77,10 +77,10 @@ def read_delta_rai_formula(formula_pkl_file: str, current_best_formula_file: str
     return delta_formula, feature_mappings, feature_order, features_in_formula
 
 
-def delta_rai(d_form, x_in: pd.DataFrame, feature_order: list | None = None):
+def delta_xai(d_form, x_in: pd.DataFrame, feature_order: list | None = None):
     """
-    Calculates probability to be classified as RAI resistant or not based on the
-    KAAM formula calculated using the default training set
+    Calculates probability associated to the classification of the target class
+    based on the KAAM formula calculated using the default training set.
     :param d_form: sympy object containing the formula
     :param x_in: Pandas dataframe containing the features to be used for the
     classification
@@ -123,32 +123,6 @@ def delta_rai(d_form, x_in: pd.DataFrame, feature_order: list | None = None):
     return delta
 
 
-def delta_rai_old(x):
-    """
-    Calculates probability to be classified as RAI resistant or not based on the
-    KAAM formula calculated using the default training set
-    :param x: Pandas dataframe containing the features to be used for the
-    classification
-    :return: Pandas series containing the probability values
-    """
-    names = ['Metastases', 'Gender', 'ATA_risk', 'Tumor_size_(cm)', 'BMI', 'Tumor_stage', 'Node_stage', 'Age', 'const']
-    delta = [0.528 * x['Metastases'],
-             -0.02 * x['Gender'],
-             0.141 * (x['ATA_risk'] - 0.743)**2,
-             0.169 * (0.60 * x['Tumor_size_(cm)'] + 1)**2,
-             -0.004 * (x['BMI'] - 0.359)**2,
-             2.002 * (0.035 * x['Tumor_stage'] + 1)**2,
-             0.041*(x['Node_stage'] + 0.661)**2,
-             0.392 * (0.567 * x['Age'] + 1)**2,
-             -4.065 * np.ones_like(x['Gender'])]
-    delta = np.array(delta).T
-    df = pd.DataFrame(delta, columns=names, index=x.index)
-    row_sum = -df.sum(axis=1)
-    pred_prob = 1 / (1 + np.exp(row_sum))
-    df["pred_prob"] = pred_prob
-    return df
-
-
 def threshold_for_target_fnr(y_true: list, y_prob: list, target_fnr: float=0):
     """
     Find the highest threshold such that FNR <= target_fnr.
@@ -171,7 +145,7 @@ def threshold_for_target_fnr(y_true: list, y_prob: list, target_fnr: float=0):
 
     positives = np.sum(y_true == 1)
     if positives == 0:
-        raise ValueError("No positive samples in y_true; FNR is undefined.")
+        return 0.5, 0.0
 
     best_threshold = None
     best_fnr = None
@@ -209,7 +183,9 @@ def analyze_patient(
         show_closest_radial=True,
         show_average_radial=True,
         show_average_class0_radial=True,
-        show_average_class1_radial=True
+        show_average_class1_radial=True,
+        neg_class_label="Negative",
+        pos_class_label="Positive",
     ):
 
     print(f"Analyzing patient {patient_id}")
@@ -275,12 +251,12 @@ def analyze_patient(
 
         # Plot the average for class 0
         if show_average_class0_radial:
-            _ = ax.plot(theta, avg_proba_class0, label='Avg. RAI-R negative', color='g')
+            _ = ax.plot(theta, avg_proba_class0, label=f'Avg. {neg_class_label}', color='g')
             #ax.fill(theta, avg_proba_class0, alpha=0.1, color='g')
 
         # Plot the average for class 1
         if show_average_class1_radial:
-            _ = ax.plot(theta, avg_proba_class1, label='Avg. RAI-R positive', color='yellow')
+            _ = ax.plot(theta, avg_proba_class1, label=f'Avg. {pos_class_label}', color='yellow')
             #ax.fill(theta, avg_proba_class1, alpha=0.1, color='yellow')
 
         # Prepare for individual patient plotting
@@ -426,10 +402,10 @@ def analyze_patient_new(
     
     # 1. Plot Reference Populations
     if show_average_class0_radial:
-        ax.plot(theta, avg_c0_norm, color='#2ca02c', linewidth=2, linestyle='--', label='Avg. RAI-R negative')
+        ax.plot(theta, avg_c0_norm, color='#2ca02c', linewidth=2, linestyle='--', label='Avg. negative')
         
     if show_average_class1_radial:
-        ax.plot(theta, avg_c1_norm, color='#d62728', linewidth=2, linestyle='--', label='Avg. RAI-R positive')
+        ax.plot(theta, avg_c1_norm, color='#d62728', linewidth=2, linestyle='--', label='Avg. positive')
         
     if show_average_radial:
         ax.plot(theta, avg_norm, color='grey', linewidth=2, label='Population Average')
