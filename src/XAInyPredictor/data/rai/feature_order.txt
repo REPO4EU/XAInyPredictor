@@ -1,0 +1,1 @@
+Variables: ['Age', 'Gender', 'BMI', 'Histology', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ETE', 'Multifocality', 'Vascular invasion', 'Resection', 'ATA risk', 'Goal of RAI']

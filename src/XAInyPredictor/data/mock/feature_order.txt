@@ -1,0 +1,1 @@
+Variables: ['Age', 'BMI', 'Blood Pressure', 'Glucose', 'Family History', 'Smoking Status', 'Physical Activity', 'Diet Quality']

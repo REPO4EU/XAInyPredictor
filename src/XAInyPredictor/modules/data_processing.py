@@ -11,9 +11,9 @@ from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import StandardScaler
 
 
-def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, target: str | None = 'RAI-R') -> pd.DataFrame:
+def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, encoding_config: dict = None, target: str = 'class_target', allowed_columns: list | None = None) -> pd.DataFrame:
     """
-    Processes raw data to be used by the RAI algorithm.
+    Processes raw data to be used by the XAI algorithm.
 
     :param raw_df: Pandas dataframe containing the raw data.
     :type raw_df: pd.DataFrame
@@ -21,7 +21,9 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, targe
         will be saved. If None, it will not be saved.
     :type output_file: str | None
     :param target: Name of the column containing the target feature.
-    :type target: str | None
+    :type target: str
+    :param allowed_columns: List of column names to keep. If None, keeps all columns.
+    :type allowed_columns: list | None
     :return: Pandas dataframe containing the processed data.
     :rtype: DataFrame
     """
@@ -36,8 +38,19 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, targe
         target_column = raw_df.pop('class_target')
         raw_df['class_target'] = target_column
 
+    # Include target column within allowed_columns    
+    if allowed_columns and ('class_target' not in allowed_columns):
+        allowed_columns.append('class_target')
+
+    # Get encoding dictionary
+    if encoding_config is None:
+        encoding_dict = {}
+    else:
+        encoding_dict = encoding_config.copy()
+    encoding_dict.pop('class_target', None)
+
     # Process data
-    clean_df = clean_data(raw_df)
+    clean_df = clean_data(raw_df, allowed_columns=allowed_columns)
     if target:
         target_prop_plot = check_target_proportion(clean_df)
     non_numeric_summary = check_non_numeric_features(clean_df)
@@ -46,7 +59,7 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, targe
     cat_feat_results = plot_distribution_categorical_features(clean_nomissing_df)
     (outliers_iqr, outliers_z) = detect_outliers(clean_nomissing_df)
     cramers_results = calculate_cramers_v_matrix(clean_nomissing_df)
-    norm_df = normalize_and_encode_features(clean_nomissing_df)
+    norm_df = normalize_and_encode_features(clean_nomissing_df, encoding_dict)
 
     # Save the processed dataset to a CSV file
     if output_file != None:
@@ -55,29 +68,34 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, targe
     return norm_df
 
 
-def process_raw_form_data(raw_df: pd.DataFrame, example_raw_df: pd.DataFrame) -> pd.DataFrame:
+def process_raw_form_data(raw_df: pd.DataFrame, example_raw_df: pd.DataFrame, encoding_config: dict = None, allowed_columns: list | None = None) -> pd.DataFrame:
     """
-    Processes raw data from the XAInyPredictor form to be used by the RAI algorithm.
+    Processes raw data from the XAInyPredictor form to be used by the XAI algorithm.
 
     :param raw_df: Pandas dataframe containing the raw data.
     :type raw_df: pd.DataFrame
     :param example_raw_df: Pandas dataframe containing the raw example data. The
         data is used as reference to imputate missing values.
     :type example_raw_df: pd.DataFrame
+    :param encoding_config: Dictionary containing encoding mappings for categorical features.
+    :type encoding_config: dict
+    :param allowed_columns: List of column names to keep. If None, keeps all columns.
+    :type allowed_columns: list | None
     :return: Pandas dataframe containing the processed data.
     :rtype: DataFrame
     """
-    clean_df = clean_data(raw_df)
+    clean_df = clean_data(raw_df, allowed_columns)
     non_numeric_summary = check_non_numeric_features(clean_df)
 
-    # Imputate values using as reference the example data (if necessary)
     original_length = len(clean_df)
-    clean_example_raw_df = clean_data(example_raw_df)
+    clean_example_raw_df = clean_data(example_raw_df, allowed_columns)
     df_and_example = pd.concat([clean_df, clean_example_raw_df], ignore_index=True)
     df_and_example_nomissing = handle_missing_values(df_and_example)
 
-    # Normalize / Encode
-    encoding_dict = create_rai_encoding_dict()
+    if encoding_config is None:
+        encoding_dict = {}
+    else:
+        encoding_dict = encoding_config.copy()
     encoding_dict.pop('class_target', None)
     df_and_example_norm = normalize_and_encode_features(df_and_example_nomissing, encoding_dict)
 
@@ -89,34 +107,28 @@ def process_raw_form_data(raw_df: pd.DataFrame, example_raw_df: pd.DataFrame) ->
     return norm_df
 
 
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
+def clean_data(df: pd.DataFrame, allowed_columns: list | None = None) -> pd.DataFrame:
     """
     Processes raw data to keep required columns, remove trailing whitespaces
     and make sure missing values are represented as NaN.
-    
+
     :param df: Pandas dataframe containing the raw data.
     :type df: pd.DataFrame
+    :param allowed_columns: List of column names to keep. If None, keeps all columns.
+    :type allowed_columns: list | None
     :return: Pandas dataframe containing the processed data.
-    :rtype: DataFrame
+    :rtype: pd.DataFrame
     """
-    # Remove extra whitespace from column names
     df.columns = df.columns.str.strip()
 
-    # Keep required columns
-    required_columns = ['Age', 'Gender', 'BMI', 'Histology', 'Tumor size (cm)',
-                        'Tumor stage', 'Node stage', 'Metastases', 'ETE',
-                        'Multifocality', 'Vascular invasion', 'Resection',
-                        'ATA risk', 'Goal of RAI', 'Persistence', 'class_target']
-    present_columns = [col for col in df.columns if col in required_columns]
-    proc_df = df[present_columns]
+    if allowed_columns is not None:
+        present_columns = [col for col in df.columns if col in allowed_columns]
+        df = df[present_columns]
 
-    # Remove extra whitespace from all string entries in the dataset
-    proc_df = proc_df.map(lambda x: x.strip() if isinstance(x, str) else x)
+    df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
+    df.replace('NA', np.nan, inplace=True)
 
-    # Replace 'NA' and other textual representations of missing values with NaN
-    proc_df.replace('NA', np.nan, inplace=True)
-
-    return proc_df
+    return df
 
 
 def check_target_proportion(
@@ -187,40 +199,21 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     """
     Checks the percentage of missing values for each feature in the input data
     frame and imputates new values.
-    
+
     :param df: Pandas dataframe containing the raw data.
     :type df: pd.DataFrame
     :return: Pandas dataframe containing the new data frame with the imputated values.
     :rtype: pd.DataFrame
     """
-    # Check percentage of missing values
     missing_percent_df = check_percent_missing_values(df)
 
-    # Create a copy of the DataFrame to preserve the original 'Gender' variable
-    imputation_df = df[['Age', 'BMI', 'Gender','Tumor size (cm)']].copy()
-
-    # Encode 'Gender' as a numerical feature (e.g., 0 and 1)
-    imputation_df['Gender'] = imputation_df['Gender'].map({'M': 0, 'F': 1})
-
-    # Imputate values for BMI
-    imputation_df = imputate_values_for_feature_with_reference(
-        imputation_df,
-        feature_to_imputate='BMI',
-        reference_features=['Age', 'BMI', 'Gender', 'Tumor size (cm)']
-    )
     proc_df = df.copy()
-    proc_df['BMI'] = imputation_df['BMI']
 
-    # Impute numerical columns with median values
     proc_df = imputate_numerical_values_with_median(proc_df)
-
-    # Impute categorical columns with the most frequent value (mode)
     proc_df = imputate_categorical_values_with_mode(proc_df)
 
-    # Check percentage of missing values after imputation
     missing_percent_df2 = check_percent_missing_values(proc_df)
 
-    # Display the dataset to verify changes
     print("Dataset after handling missing values:")
     print(proc_df.head())
 

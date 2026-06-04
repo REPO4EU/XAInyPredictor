@@ -1,15 +1,35 @@
-## v0.0.1 (2025-07-15): First version of the app
+## v1.1.0 (2026-05-14): Use Case Generalization
 
-This is the first version of the app, with two tabs: `Inspect input file` and `Run analysis`.
+### Architecture
+- Refactored `modules/rai.py` → `modules/xai.py` with generalized naming (delta_xai, read_delta_xai_formula)
+- Introduced `modules/model_registry.py` providing `discover_use_cases()` and `load_use_case()` functions
+- Added startup modal for initial use case selection
+- Added runtime use case switching via navbar dropdown with confirmation dialog
+- Default use case pre-loaded at module import; non-default use cases cached in `_USE_CASE_CACHE` to avoid redundant reloading
+- Modules receive `(config_init, config_reactive)` dual-parameter pattern for reactive config access
 
-Pull request link: https://github.com/REPO4EU/ShinyRAI/pull/1
+### Configuration
+- Each use case now defined by a single `config.yml` (not two config files)
+- Config drives: feature list, labels, encoding rules, tab titles, help texts, descriptions
+- YAML format for all use case configuration
+
+### Data
+- Use case data moved to `data/<use_case>/` subfolders with 4 required files: `config.yml`, `model.pkl`, `feature_order.txt`, `example_data.csv`
+- Provided two built-in use cases: `rai` (Radioiodine Refractoriness Predictor, 14 features) and `mock` (Diabetes Risk Predictor, 8 features)
+- Removed legacy flat data files: `formula.pkl`, `current_best_formula.txt`, `mock.csv`, `mock_processed.csv`
+
+### Front-end
+- Dynamic tab labels and help text based on selected use case configuration
+- All UI modules rebuilt from initial config; runtime switching updates reactive values
+
+Pull request: TBD
 
 
 ## v1.0.0 (2026-02-03): App revamp
 
 ### Back-end
-* Included functions to process and normalize data (`src/ShinyRAI/modules/data_processing.py`) which allow to normalize new input data introduced by the user and use it with our model.
-* Included option to update the RAI model by reading the files `src/ShinyRAI/data/formula.pkl` and `src/ShinyRAI/data/current_best_formula.txt`. Before, the RAI model was hardcoded within the code of the app. Now, the model is read from these files. They are not input files that the user needs to provide, but "hidden" input files that are meant to be updated by the developers. Thus, it's a way to facilitate the update of the model for the developers. The function to read the RAI model is in `src/ShinyRAI/modules/rai.py` --> `read_delta_rai_formula`.
+* Included functions to process and normalize data (`src/XAInyPredictor/modules/data_processing.py`) which allow to normalize new input data introduced by the user and use it with our model.
+* Included option to update the model by reading the files `src/XAInyPredictor/data/formula.pkl` and `src/XAInyPredictor/data/current_best_formula.txt`. Before, the model was hardcoded within the code of the app. Now, the model is read from these files. They are not input files that the user needs to provide, but "hidden" input files that are meant to be updated by the developers. Thus, it's a way to facilitate the update of the model for the developers. The function to read the model is in `src/XAInyPredictor/modules/xai.py` --> `read_delta_xai_formula`.
 
 ### Front-end
 * Improved the overall design of the app.
@@ -26,3 +46,10 @@ Pull request link: https://github.com/REPO4EU/ShinyRAI/pull/1
 * Included help options throughout the whole app, plus a general information button that explains the overall functioning of the app.
 
 Pull request link: https://github.com/REPO4EU/ShinyRAI/pull/2
+
+
+## v0.0.1 (2025-07-15): First version of the app
+
+This is the first version of the app, with two tabs: `Inspect input file` and `Run analysis`.
+
+Pull request link: https://github.com/REPO4EU/ShinyRAI/pull/1

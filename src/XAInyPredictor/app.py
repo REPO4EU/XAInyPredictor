@@ -1,217 +1,378 @@
 """Module providing a shiny UI."""
-# Import modules
 import pandas as pd
 from pathlib import Path
 from shiny import App, reactive, Session, ui
 
-# Local imports
 from XAInyPredictor.shinyapp import data_input, data_exploration, prediction
+from XAInyPredictor.modules.model_registry import discover_use_cases, load_use_case, UseCaseNotFoundError
 from XAInyPredictor.modules.data_processing import clean_data, process_raw_data, process_raw_form_data
-from XAInyPredictor.modules.rai import delta_rai, read_delta_rai_formula, split_data_with_known_target, threshold_for_target_fnr
+from XAInyPredictor.modules.xai import delta_xai, read_delta_xai_formula, split_data_with_known_target, threshold_for_target_fnr
 
-
-# --- Constants & Setup ---
 
 WWW_DIR = Path(__file__).parent / "shinyapp" / "www"
-EXAMPLE_RAW_FILE = Path(__file__).parent / "data" / "mock.csv"
-EXAMPLE_PROC_FILE = Path(__file__).parent / "data" / "mock_processed.csv"
-FORMULA_PKL_FILE = Path(__file__).parent / "data" / "formula.pkl"
-BEST_FORMULA_FILE = Path(__file__).parent / "data" / "current_best_formula.txt"
 
-# Load static model data once at startup
-EXAMPLE_RAW_DF = pd.read_csv(EXAMPLE_RAW_FILE)
-EXAMPLE_PROC_DF = process_raw_data(raw_df=EXAMPLE_RAW_DF, output_file=EXAMPLE_PROC_FILE, target='RAI-R')
+USE_CASES = discover_use_cases()
+_USE_CASE_CACHE = {}
 
-# Ensure clean IDs for the model
-EXAMPLE_RAW_DF = clean_data(EXAMPLE_RAW_DF)
-EXAMPLE_RAW_DF['ID'] = [i + 1 for i in EXAMPLE_RAW_DF.index]
-EXAMPLE_PROC_DF['ID'] = [i + 1 for i in EXAMPLE_PROC_DF.index]
-
-# Pre-calculate example training components (Static)
-X_TRAIN_EXAMPLE, X_TEST_EXAMPLE, Y_TRAIN_EXAMPLE, Y_TEST_EXAMPLE = split_data_with_known_target(
-    EXAMPLE_PROC_DF, target='class_target', test_split=0.2
-)
-X_TRAIN_EXAMPLE_RAW = EXAMPLE_RAW_DF[EXAMPLE_RAW_DF['ID'].isin(X_TRAIN_EXAMPLE['ID'])] # for the visualization of data
-X_TEST_EXAMPLE_RAW = EXAMPLE_RAW_DF[EXAMPLE_RAW_DF['ID'].isin(X_TEST_EXAMPLE['ID'])] # for the visualization of data
-DELTA_FORMULA, _, FEATURE_ORDER, FEATS_IN_FORMULA = read_delta_rai_formula(FORMULA_PKL_FILE, BEST_FORMULA_FILE)
-FEATURE_ORDER = [feat.replace(' ', '_') for feat in FEATURE_ORDER]
-D_TRAIN_EXAMPLE = delta_rai(DELTA_FORMULA, X_TRAIN_EXAMPLE, FEATURE_ORDER)
-D_TEST_EXAMPLE = delta_rai(DELTA_FORMULA, X_TEST_EXAMPLE, FEATURE_ORDER)
-DEFAULT_PROB_THRESHOLD, _ = threshold_for_target_fnr(
-    Y_TEST_EXAMPLE.to_numpy(),
-    D_TEST_EXAMPLE['pred_prob'].to_numpy(),
-    target_fnr=0
-)
+def _load_model_data_cached(use_case: str):
+    if use_case in _USE_CASE_CACHE:
+        return _USE_CASE_CACHE[use_case]
+    data = load_model_data(use_case)
+    _USE_CASE_CACHE[use_case] = data
+    return data
 
 
-# --- UI Layout ---
+def build_startup_modal():
+    use_case_choices = {name: info["display_name"] for name, info in USE_CASES.items()}
+    return ui.modal(
+        ui.tags.div(
+            ui.tags.h3("Select Use Case", style="color: #007bff; font-weight: bold; text-align: center;"),
+            ui.tags.p("Choose which prediction model to use:", style="text-align: center;"),
+            ui.br(),
+            ui.input_select(
+                id="startup_use_case",
+                label="Available Use Cases:",
+                choices=use_case_choices,
+                selected="rai",
+            ),
+        ),
+        title="Welcome to XAInyPredictor",
+        easy_close=False,
+        footer=ui.TagList(
+            ui.input_action_button("confirm_startup_use_case", "Start", class_="btn-primary", onclick="Shiny.setInputValue('startup_confirmed', 'yes');")
+        )
+    )
 
-page_dependencies = ui.tags.head(
-    ui.tags.link(rel="stylesheet", type="text/css", href="layout.css"),
-    ui.tags.link(rel="stylesheet", type="text/css", href="style.css"),
-    ui.tags.script(src="index.js"),
-    ui.tags.meta(name="description", content="Tool to run RAI and explore the results"),
-    ui.tags.meta(name="theme-color", content="#000000"),
-    ui.tags.meta(name="viewport", content="width=device-width, initial-scale=1"),
-)
 
-page_header = ui.tags.div(
-    ui.tags.div(
-        ui.tags.h3("XAInyPredictor", style="margin: 0; color: #007bff; font-weight: 800; letter-spacing: -1px;"),
-        id="app-title",
-        class_="navigation-title",
-    ),
-    ui.tags.div(
+def build_page_header(config: dict, current_use_case: str):
+    use_case_choices = {name: info["display_name"] for name, info in USE_CASES.items()}
+
+    return ui.tags.div(
+        ui.tags.div(
+            ui.tags.h3(
+                config.get("titles", {}).get("app_title", "XAInyPredictor"),
+                style="margin: 0; color: #007bff; font-weight: 800; letter-spacing: -1px;"
+            ),
+            id="app-title",
+            class_="navigation-title",
+        ),
+        ui.tags.div(
+            ui.tags.div(
+                ui.input_action_button(
+                    id="tab_data_input",
+                    label=config.get("titles", {}).get("tab_data_input", "1. Data Input"),
+                    class_="navbar-button active-tab",
+                ),
+                id="div-navbar-map",
+            ),
+            ui.tags.div(
+                ui.input_action_button(
+                    id="tab_data_exploration",
+                    label=config.get("titles", {}).get("tab_data_exploration", "2. Data Exploration"),
+                    class_="navbar-button",
+                ),
+                id="div-navbar-map",
+            ),
+            ui.tags.div(
+                ui.input_action_button(
+                    id="tab_prediction",
+                    label=config.get("titles", {}).get("tab_prediction", "3. Prediction"),
+                    class_="navbar-button",
+                ),
+                id="div-navbar-plot",
+            ),
+            ui.tags.div(
+                ui.input_select(
+                    id="use_case_selector",
+                    label=None,
+                    choices=use_case_choices,
+                    selected=current_use_case,
+                ),
+                style="display: flex; align-items: center; margin-left: 10px;"
+            ),
+            id="div-navbar-tabs",
+            class_="navigation-menu",
+        ),
+        ui.tags.div(
+            ui.tags.a(
+                ui.tags.img(src="static/img/repo4eu_small_logo.png", height="40px"),
+                href="https://repo4eu/",
+                target="_blank",
+            ),
+            id="logo-right",
+            class_="navigation-logo-right",
+        ),
         ui.tags.div(
             ui.input_action_button(
-                id="tab_data_input",
-                label="1. Data Input",
-                class_="navbar-button active-tab",
+                id="info_icon",
+                label=None,
+                icon=ui.tags.i(class_="glyphicon glyphicon-info-sign"),
+                class_="navbar-info",
             ),
-            id="div-navbar-map",
+            class_="navigation-info",
         ),
-        ui.tags.div(
-            ui.input_action_button(
-                id="tab_data_exploration",
-                label="2. Data Exploration",
-                class_="navbar-button",
-            ),
-            id="div-navbar-map",
-        ),
-        ui.tags.div(
-            ui.input_action_button(
-                id="tab_prediction",
-                label="3. Prediction",
-                class_="navbar-button",
-            ),
-            id="div-navbar-plot",
-        ),
-        id="div-navbar-tabs",
-        class_="navigation-menu",
-    ),
-    ui.tags.div(
-        ui.tags.a(
-            ui.tags.img(src="static/img/repo4eu_small_logo.png", height="40px"),
-            href="https://repo4.eu/",
-            target="_blank",
-        ),
-        id="logo-right",
-        class_="navigation-logo-right",
-    ),
-    ui.tags.div(
-        ui.input_action_button(
-            id="info_icon",
-            label=None,
-            icon=ui.tags.i(class_="glyphicon glyphicon-info-sign"),
-            class_="navbar-info",
-        ),
-        class_="navigation-info",
-    ),
-    id="div-navbar",
-    class_="navbar-top page-header card-style",
-)
-
-app_ui = ui.page_fluid(
-    page_dependencies,
-    ui.tags.div(
-        page_header,
-        ui.tags.div(
-            data_input.data_input_ui("data_input"),
-            id="data-input-container",
-            class_="page-main main-visible"
-        ),
-        ui.tags.div(
-            data_exploration.data_exploration_ui("data_exploration"),
-            id="inspect-input-container",
-            class_="page-main"
-        ),
-        ui.tags.div(
-            prediction.prediction_ui("prediction"),
-            id="run-analysis-container",
-            class_="page-main"
-        ),
-        class_="page-layout"
-    ),
-    title="XAInyPredictor",
-)
+        id="div-navbar",
+        class_="navbar-top page-header card-style",
+    )
 
 
-# --- Server ---
+def build_ui(config: dict, current_use_case: str):
+    page_dependencies = ui.tags.head(
+        ui.tags.link(rel="stylesheet", type="text/css", href="layout.css"),
+        ui.tags.link(rel="stylesheet", type="text/css", href="style.css"),
+        ui.tags.script(src="index.js"),
+        ui.tags.meta(name="description", content=config.get("description", "XAI Predictor")),
+        ui.tags.meta(name="theme-color", content="#000000"),
+        ui.tags.meta(name="viewport", content="width=device-width, initial-scale=1"),
+    )
+
+    page_header = build_page_header(config, current_use_case)
+
+    return ui.page_fluid(
+        page_dependencies,
+        ui.tags.div(
+            page_header,
+            ui.tags.div(
+                data_input.data_input_ui("data_input", DEFAULT_CONFIG),
+                id="data-input-container",
+                class_="page-main main-visible"
+            ),
+            ui.tags.div(
+                data_exploration.data_exploration_ui("data_exploration", DEFAULT_CONFIG),
+                id="inspect-input-container",
+                class_="page-main"
+            ),
+            ui.tags.div(
+                prediction.prediction_ui("prediction", DEFAULT_CONFIG),
+                id="run-analysis-container",
+                class_="page-main"
+            ),
+            class_="page-layout"
+        ),
+        title=config.get("titles", {}).get("app_title", "XAInyPredictor"),
+    )
+
+
+def load_model_data(use_case_name: str):
+    use_case_data = load_use_case(use_case_name)
+    config = use_case_data["config"]
+    encoding_dict = config.get("encoding", {})
+    example_raw_df = use_case_data["example_data"].copy()
+    feature_order = use_case_data["feature_order"]
+
+    use_case_path = use_case_data["path"]
+    model_file = use_case_path / "model.pkl"
+    formula_file = use_case_path / "feature_order.txt"
+
+    target_col = config.get("target_column", "target")
+    allowed_columns = [f["name"] for f in config.get("features", [])]
+    example_proc_df = process_raw_data(
+        raw_df=example_raw_df.copy(),
+        output_file=None,
+        encoding_config=encoding_dict,
+        target=target_col,
+        allowed_columns=allowed_columns,
+    )
+
+    example_raw_df = clean_data(example_raw_df, allowed_columns)
+    example_raw_df['ID'] = [i + 1 for i in example_raw_df.index]
+    example_proc_df['ID'] = [i + 1 for i in example_proc_df.index]
+
+    X_TRAIN, X_TEST, Y_TRAIN, Y_TEST = split_data_with_known_target(
+        example_proc_df, target='class_target', test_split=0.2
+    )
+    X_TRAIN_RAW = example_raw_df[example_raw_df['ID'].isin(X_TRAIN['ID'])]
+    X_TEST_RAW = example_raw_df[example_raw_df['ID'].isin(X_TEST['ID'])]
+
+    DELTA_FORMULA, _, FEATURE_ORDER, FEATS_IN_FORMULA = read_delta_xai_formula(str(model_file), str(formula_file))
+    FEATURE_ORDER_CLEAN = [feat.replace(' ', '_') for feat in FEATURE_ORDER]
+
+    D_TRAIN = delta_xai(DELTA_FORMULA, X_TRAIN, FEATURE_ORDER_CLEAN)
+    D_TEST = delta_xai(DELTA_FORMULA, X_TEST, FEATURE_ORDER_CLEAN)
+
+    DEFAULT_THRESHOLD, _ = threshold_for_target_fnr(
+        Y_TEST.to_numpy(),
+        D_TEST['pred_prob'].to_numpy(),
+        target_fnr=0
+    )
+
+    return {
+        "config": config,
+        "delta_formula": DELTA_FORMULA,
+        "example_raw_df": example_raw_df,
+        "example_proc_df": example_proc_df,
+        "X_TRAIN_RAW": X_TRAIN_RAW,
+        "X_TEST_RAW": X_TEST_RAW,
+        "X_TRAIN": X_TRAIN,
+        "X_TEST": X_TEST,
+        "Y_TRAIN": Y_TRAIN,
+        "Y_TEST": Y_TEST,
+        "D_TRAIN": D_TRAIN,
+        "D_TEST": D_TEST,
+        "FEATURE_ORDER_CLEAN": FEATURE_ORDER_CLEAN,
+        "FEATURE_ORDER_DISPLAY": [feat.replace('_', ' ') for feat in FEATURE_ORDER_CLEAN],
+        "FEATS_IN_FORMULA": FEATS_IN_FORMULA,
+        "DEFAULT_THRESHOLD": DEFAULT_THRESHOLD,
+    }
+
+
+DEFAULT_USE_CASE = "rai"
+MODEL_DATA = load_model_data(DEFAULT_USE_CASE)
+DEFAULT_CONFIG = MODEL_DATA["config"]
+
+app_ui = build_ui(DEFAULT_CONFIG, DEFAULT_USE_CASE)
+
 
 def server(input, output, session: Session):
+    current_use_case = reactive.Value(DEFAULT_USE_CASE)
+    model_data = reactive.Value(MODEL_DATA)
+    config = reactive.Value(DEFAULT_CONFIG)
 
-    # 1. Define reactive variables
+    patient_selected = reactive.Value(None)
+    prob_threshold = reactive.Value(MODEL_DATA["DEFAULT_THRESHOLD"])
+    data_available = reactive.Value(False)
 
-    # Reactive variables related with the UI
-    patient_selected = reactive.Value(None) # ID of the currently selected patient
-    prob_threshold = reactive.Value(DEFAULT_PROB_THRESHOLD) # Probability threshold to classify patients
-    data_available = reactive.Value(False) # Set to True when new data is available
+    delta_test_reactive = reactive.Value(MODEL_DATA["D_TEST"])
+    x_test_reactive = reactive.Value(MODEL_DATA["X_TEST"])
 
-    # Reactive variables related with the model
-    delta_test_reactive = reactive.Value(D_TEST_EXAMPLE)
-    x_test_reactive = reactive.Value(X_TEST_EXAMPLE)
+    @reactive.Effect
+    def _show_startup_modal():
+        ui.modal_show(build_startup_modal())
 
+    startup_initialized = reactive.Value(False)
 
-    # 2. Load Data Module
+    @reactive.Effect
+    @reactive.event(input.confirm_startup_use_case)
+    async def _on_startup_confirm():
+        if input.startup_confirmed() == "yes" and not startup_initialized.get():
+            selected_use_case = input.startup_use_case()
+            startup_initialized.set(True)
 
-    # We pass the static data in, and get the dynamic user data out
-    input_results = data_input.server(
-        "data_input", 
-        X_TEST_EXAMPLE_RAW
-    )
-    # These are reactive.Value objects returned by the module
-    analysis_data = input_results["data"] 
+            if selected_use_case == DEFAULT_USE_CASE:
+                new_model_data = MODEL_DATA
+            else:
+                try:
+                    new_model_data = _load_model_data_cached(selected_use_case)
+                except (UseCaseNotFoundError, Exception) as e:
+                    ui.notification_show(f"Error loading use case: {e}", type="error")
+                    startup_initialized.set(False)
+                    return
+
+            current_use_case.set(selected_use_case)
+            model_data.set(new_model_data)
+            config.set(new_model_data["config"])
+            delta_test_reactive.set(new_model_data["D_TEST"])
+            x_test_reactive.set(new_model_data["X_TEST"])
+            prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
+
+            ui.update_select("use_case_selector", selected=selected_use_case)
+
+            ui.modal_remove()
+
+    @reactive.Effect
+    @reactive.event(input.use_case_selector)
+    def _switch_use_case():
+        if not startup_initialized.get():
+            return
+        new_use_case = input.use_case_selector()
+        if new_use_case and new_use_case != current_use_case.get():
+            ui.modal_show(
+                ui.modal(
+                    ui.tags.p("Switching use case will clear current data. Continue?"),
+                    title="Confirm Use Case Change",
+                    footer=ui.TagList(
+                        ui.modal_button("Cancel", onclick="Shiny.setInputValue('use_case_confirm', 'cancel');"),
+                        ui.input_action_button("confirm_switch", "Confirm", class_="btn-primary", onclick="Shiny.setInputValue('use_case_confirm', 'confirm');")
+                    )
+                )
+            )
+
+    @reactive.Effect
+    @reactive.event(input.confirm_switch)
+    async def _confirm_switch():
+        if input.use_case_confirm() == "cancel":
+            return
+
+        new_use_case = input.use_case_selector()
+        try:
+            new_model_data = _load_model_data_cached(new_use_case)
+            current_use_case.set(new_use_case)
+            model_data.set(new_model_data)
+            config.set(new_model_data["config"])
+
+            delta_test_reactive.set(new_model_data["D_TEST"])
+            x_test_reactive.set(new_model_data["X_TEST"])
+            prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
+            data_available.set(False)
+            patient_selected.set(None)
+
+            ui.notification_show(f"Switched to {new_model_data['config'].get('name', new_use_case)}", type="message")
+
+            await session.send_custom_message("toggleActiveTab", {"activeTab": "data_input"})
+
+            ui.modal_remove()
+
+        except (UseCaseNotFoundError, Exception) as e:
+            ui.notification_show(f"Error loading use case: {e}", type="error")
+
+    @reactive.Effect
+    @reactive.event(input.btn_cancel_switch)
+    def _cancel_switch():
+        pass
+
+    input_results = data_input.server("data_input", model_data, DEFAULT_CONFIG, config)
+    analysis_data = input_results["data"]
     is_custom_data = input_results["is_custom"]
-
-
-    # 3. Update model variables
 
     @reactive.Effect
     def _update_analysis_context():
         current_df = analysis_data.get()
         is_custom = is_custom_data.get()
+        md = model_data.get()
+        cfg = config.get()
 
         if current_df is None:
             data_available.set(False)
             return
+
         data_available.set(True)
 
         if is_custom:
-            current_proc_df = process_raw_form_data(raw_df=current_df, example_raw_df=EXAMPLE_RAW_DF)
-            current_proc_df.columns = [col.replace(' ', '_') for col in current_proc_df.columns] # substitute spaces for _ before training
-            d_test_curr = delta_rai(DELTA_FORMULA, current_proc_df, FEATURE_ORDER)
+            allowed_columns = [f["name"] for f in cfg.get("features", [])]
+            current_proc_df = process_raw_form_data(
+                raw_df=current_df,
+                example_raw_df=md["example_raw_df"],
+                encoding_config=cfg.get("encoding", {}),
+                allowed_columns=allowed_columns
+            )
+            current_proc_df.columns = [col.replace(' ', '_') for col in current_proc_df.columns]
+            d_test_curr = delta_xai(md.get("delta_formula"), current_proc_df, md["FEATURE_ORDER_CLEAN"])
             delta_test_reactive.set(d_test_curr)
             x_test_reactive.set(current_proc_df)
         else:
-            delta_test_reactive.set(D_TEST_EXAMPLE)
-            x_test_reactive.set(X_TEST_EXAMPLE)
-
-
-    # 4. Load Analysis Modules
+            delta_test_reactive.set(md["D_TEST"])
+            x_test_reactive.set(md["X_TEST"])
 
     data_exploration.server(
         "data_exploration",
         analysis_data,
-        X_TRAIN_EXAMPLE_RAW,
-        patient_selected
+        model_data,
+        patient_selected,
+        DEFAULT_CONFIG,
+        config
     )
+
     prediction.server(
         "prediction",
         analysis_data,
         patient_selected,
-        D_TRAIN_EXAMPLE,
+        model_data,
         delta_test_reactive,
-        X_TRAIN_EXAMPLE,
-        Y_TRAIN_EXAMPLE,
         x_test_reactive,
-        Y_TEST_EXAMPLE,
         prob_threshold,
-        [feat.replace('_', ' ') for feat in FEATURE_ORDER],
-        FEATS_IN_FORMULA
+        DEFAULT_CONFIG,
+        config
     )
-
-
-    # 5. Define Tab Navigation Logic (JavaScript triggers)
 
     @reactive.Effect
     @reactive.event(input.tab_data_input)
@@ -240,48 +401,47 @@ def server(input, output, session: Session):
             "toggleActiveTab", {"activeTab": "prediction"}
         )
 
-
-    # 6. Help Modal Logic
     @reactive.Effect
     @reactive.event(input.info_icon)
     def _show_help_modal():
+        cfg = config.get()
+        labels = cfg.get("labels", {})
+        titles = cfg.get("titles", {})
+
         m = ui.modal(
             ui.div(
-                ui.tags.h4("Welcome to XAInyPredictor", style="color: #007bff; font-weight: bold; margin-top: 0;"),
-                ui.p("This tool assists in predicting Radioiodine Refractoriness (RAI-R) in thyroid cancer patients.", style="font-style: italic; color: #666;"),
+                ui.tags.h4(f"Welcome to {titles.get('app_title', 'XAInyPredictor')}", style="color: #007bff; font-weight: bold; margin-top: 0;"),
+                ui.p(cfg.get("description", ""), style="font-style: italic; color: #666;"),
                 ui.hr(),
-                
-                # Step 1: Input
+
                 ui.row(
                     ui.column(2, ui.h1("1", style="background: #e9ecef; border-radius: 50%; width: 40px; height: 40px; text-align: center; line-height: 40px; font-size: 20px; color: #495057; margin: 0 auto;")),
-                    ui.column(10, 
+                    ui.column(10,
                         ui.h5("Input Patient Data", style="font-weight: bold; margin-top: 5px;"),
-                        ui.p("Go to the ", ui.tags.b("Data Input"), " tab. You can upload a file (Excel/CSV) or manually enter details for a new patient (Age, TNM Staging, Histology, etc.).")
+                        ui.p(f"Go to the ", ui.tags.b(titles.get('tab_data_input', 'Data Input')), " tab. You can upload a file or manually enter patient details.")
                     )
                 ),
                 ui.br(),
 
-                # Step 2: Explore
                 ui.row(
                     ui.column(2, ui.h1("2", style="background: #e9ecef; border-radius: 50%; width: 40px; height: 40px; text-align: center; line-height: 40px; font-size: 20px; color: #495057; margin: 0 auto;")),
-                    ui.column(10, 
+                    ui.column(10,
                         ui.h5("Explore Features", style="font-weight: bold; margin-top: 5px;"),
-                        ui.p("In the ", ui.tags.b("Data Exploration"), " tab, compare your patient's specific risk factors (e.g., Tumor Size) against the reference population distribution.")
+                        ui.p(f"In the ", ui.tags.b(titles.get('tab_data_exploration', 'Data Exploration')), " tab, compare patient features against the reference population.")
                     )
                 ),
                 ui.br(),
 
-                # Step 3: Predict
                 ui.row(
                     ui.column(2, ui.h1("3", style="background: #e9ecef; border-radius: 50%; width: 40px; height: 40px; text-align: center; line-height: 40px; font-size: 20px; color: #495057; margin: 0 auto;")),
-                    ui.column(10, 
+                    ui.column(10,
                         ui.h5("Run Prediction", style="font-weight: bold; margin-top: 5px;"),
-                        ui.p("Click ", ui.tags.b("Prediction"), " to see the RAI-R probability. Use the Radar Chart to identify which clinical features are driving the high-risk prediction."),
+                        ui.p(f"Click ", ui.tags.b(titles.get('tab_prediction', 'Prediction')), f" to see the {labels.get('probability_column', 'Probability')}. Use the charts to identify which features are driving the prediction."),
                         ui.tags.div(
-                            ui.tags.span("Green Row", style="background: #d1e7dd; color: #0f5132; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
+                            ui.tags.span(f"{labels.get('negative_class', 'Negative')}", style="background: #d1e7dd; color: #0f5132; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
                             " = Low Risk | ",
-                            ui.tags.span("Red Row", style="background: #f8d7da; color: #842029; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
-                            " = High Risk (Refractory)",
+                            ui.tags.span(f"{labels.get('positive_class', 'Positive')}", style="background: #f8d7da; color: #842029; padding: 2px 6px; border-radius: 4px; font-size: 0.8em;"),
+                            " = High Risk",
                             style="margin-top: 5px; font-size: 0.9em;"
                         )
                     )
@@ -290,11 +450,9 @@ def server(input, output, session: Session):
             title="How to use this App",
             easy_close=True,
             footer=ui.modal_button("Got it!"),
-            size="l" # Large modal for better readability
+            size="l"
         )
         ui.modal_show(m)
 
-
-# 7. Launch App
 
 app = App(app_ui, server, static_assets=WWW_DIR)

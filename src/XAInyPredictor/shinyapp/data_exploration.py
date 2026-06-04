@@ -6,15 +6,13 @@ from shiny import Inputs, Outputs, Session, module, reactive, render, req, ui
 
 
 @module.ui
-def data_exploration_ui():
+def data_exploration_ui(config=None):
+    if config is None:
+        config = {}
+
     return ui.layout_sidebar(
         ui.sidebar(
-            ui.input_select(
-                id="feature_to_plot",
-                label="Feature to plot:",
-                choices=['Age', 'Gender', 'BMI', 'Tumor size (cm)', 'Tumor stage', 'Node stage', 'Metastases', 'ATA risk'],
-                selected='Age',
-            ),
+            ui.output_ui("feature_dropdown"),
             ui.input_select(
                 id="reference_data",
                 label= ui.div(
@@ -66,7 +64,46 @@ def data_exploration_ui():
 
 
 @module.server
-def server(input: Inputs, output: Outputs, session: Session, global_input_data, model_data, patient_selected_id):
+def server(input: Inputs, output: Outputs, session: Session, global_input_data, model_data, patient_selected_id, config_init=None, config_reactive=None):
+
+    display_to_name = reactive.Value({})
+
+    @reactive.Effect
+    def _rebuild_feature_list():
+        current_cfg = config_reactive.get() if config_reactive else (config_init or {})
+        features = current_cfg.get("features", []) if current_cfg else []
+        display_to_name.set({f["display_name"]: f["name"] for f in features})
+
+    @output
+    @render.ui
+    def feature_dropdown():
+        current_cfg = config_reactive.get() if config_reactive else (config_init or {})
+        features = current_cfg.get("features", []) if current_cfg else []
+        choices = [(f["display_name"], f["display_name"]) for f in features]
+        if not choices:
+            return ui.p("No features configured", style="font-size: 0.85em; color: gray;")
+        return ui.input_select(
+            id="feature_to_plot",
+            label="Feature to plot:",
+            choices=dict(choices),
+            selected=features[0].get("display_name") if features else None,
+        )
+
+    @reactive.Effect
+    def _ensure_valid_patient():
+        """
+        Whenever data changes, ensure the selected patient is valid.
+        If it's None or not in the new dataset, default to the first ID.
+        """
+        df = global_input_data.get()
+        if df is None or df.empty or 'ID' not in df.columns:
+            return
+        
+        current_id = patient_selected_id.get()
+        all_ids = sorted(df['ID'].astype(int).tolist())
+        
+        if current_id is None or int(current_id) not in all_ids:
+            patient_selected_id.set(all_ids[0])
 
     @output
     @render.ui
@@ -137,15 +174,25 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         if reference_data == 'Input data':
             df = global_input_data.get()
         else:
-            df = model_data
+            md = model_data.get()
+            df = md.get("X_TRAIN_RAW") if md else None
 
         if df is None or df.empty:
             return ui.p("No data available")
         
         # Ensure column names have the proper format for the UI
+        df = df.copy()
         df.columns = [col.replace('_', ' ') for col in df.columns]
-        
-        feature = str(input.feature_to_plot())
+
+        display_name = str(input.feature_to_plot())
+        col_name = display_to_name.get().get(display_name, display_name)
+        # Also try with space replacement as fallback
+        if col_name not in df.columns:
+            col_name_alt = col_name.replace(' ', '_')
+            if col_name_alt in [c.replace(' ', '_') for c in df.columns]:
+                col_name = col_name_alt
+
+        feature = col_name
         if feature not in df.columns:
             return ui.p("Feature not found")
         
@@ -192,11 +239,18 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             return fig
         
         # Ensure column names have the proper format for the UI
+        df = df.copy()
         df.columns = [col.replace('_', ' ') for col in df.columns]
-        feature = str(input.feature_to_plot())
-        patient_id = patient_selected_id.get() # use the global ID
+        display_name = str(input.feature_to_plot())
+        col_name = display_to_name.get().get(display_name, display_name)
+        if col_name not in df.columns:
+            col_name_alt = col_name.replace(' ', '_')
+            if col_name_alt in [c.replace(' ', '_') for c in df.columns]:
+                col_name = col_name_alt
 
-        # Check if feature exists
+        feature = col_name
+        patient_id = patient_selected_id.get()
+
         if feature not in df.columns:
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.set_axis_off()
@@ -215,8 +269,10 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         # Get model data if necessary
         reference_data = input.reference_data()
         if reference_data == 'Model':
-            df = model_data
-            df = pd.concat([df, patient_row])
+            md = model_data.get()
+            df = md.get("X_TRAIN_RAW") if md else None
+            if df is not None:
+                df = pd.concat([df, patient_row])
 
         # Create figure
         fig, ax = plt.subplots()
