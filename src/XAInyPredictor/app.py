@@ -1,6 +1,9 @@
 """Module providing a shiny UI."""
 from pathlib import Path
-
+import time
+import socket
+import threading
+import webbrowser
 import matplotlib
 import pandas as pd
 from shiny import App, reactive, Session, ui
@@ -503,4 +506,18 @@ def server(input, output, session: Session):
         ui.modal_show(m)
 
 
+# 7. Launch App
+# Executable launch commands
 app = App(app_ui, server, static_assets=WWW_DIR)
+def find_free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('', 0))
+        return s.getsockname()[1]
+PORT = find_free_port()
+def open_browser():
+    time.sleep(2)
+    webbrowser.open(f"http://127.0.0.1:{PORT}", new=1)
+if __name__ == "__main__":
+    print("Iniciando servidor...")
+    threading.Thread(target=open_browser, daemon=True).start()
+    app.run(host="127.0.0.1", port=PORT, log_level="critical")
