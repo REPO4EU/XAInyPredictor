@@ -1,4 +1,6 @@
 """Module providing a shiny UI."""
+import os
+import sys
 from pathlib import Path
 import time
 import socket
@@ -517,7 +519,17 @@ PORT = find_free_port()
 def open_browser():
     time.sleep(2)
     webbrowser.open(f"http://127.0.0.1:{PORT}", new=1)
+def ensure_stdio_streams():
+    if sys.stdin is None:
+        sys.stdin = open(os.devnull, "r")
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+
+
 if __name__ == "__main__":
+    ensure_stdio_streams()
     print("Iniciando servidor...")
     threading.Thread(target=open_browser, daemon=True).start()
     app.run(host="127.0.0.1", port=PORT, log_level="critical")
