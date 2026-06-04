@@ -1,0 +1,129 @@
+name: Build XAInyPredictor
+
+on:
+  push:
+  workflow_dispatch:
+
+env:
+  APP_NAME: XAInyPredictor
+  APP_VERSION: 1.0.0-beta.1
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dependencias sistema Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1
+
+      - name: Instalar dependencias Python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e .
+          python -m pip install pyinstaller
+
+      # =========================
+      # Windows
+      # =========================
+
+      - name: Build Windows app folder
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --onedir --noconsole `
+            --name "${{ env.APP_NAME }}" `
+            --icon "installer/windows/assets/XAInyPredictor.ico" `
+            --paths src `
+            --collect-all shiny `
+            --add-data "src/XAInyPredictor/data;data" `
+            --add-data "src/XAInyPredictor/shinyapp/www;shinyapp/www" `
+            "src/XAInyPredictor/app.py"
+
+      - name: Install Inno Setup
+        if: runner.os == 'Windows'
+        run: |
+          choco install innosetup --yes --no-progress
+
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\windows\XAInyPredictor.iss"
+
+      - name: Upload Windows installer
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: XAInyPredictor-Windows-Installer
+          path: dist-installer/*.exe
+
+      # =========================
+      # Linux
+      # =========================
+
+      - name: Build Linux app folder
+        if: runner.os == 'Linux'
+        run: |
+          pyinstaller --onedir \
+            --name "${APP_NAME}" \
+            --paths src \
+            --collect-all shiny \
+            --add-data "src/XAInyPredictor/data:data" \
+            --add-data "src/XAInyPredictor/shinyapp/www:shinyapp/www" \
+            "src/XAInyPredictor/app.py"
+
+      - name: Package Linux
+        if: runner.os == 'Linux'
+        run: |
+          cd dist
+          tar -czf "${APP_NAME}-${APP_VERSION}-Linux-x86_64.tar.gz" "${APP_NAME}"
+
+      - name: Upload Linux package
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: XAInyPredictor-Linux-x86_64
+          path: dist/XAInyPredictor-*-Linux-x86_64.tar.gz
+
+      # =========================
+      # macOS
+      # =========================
+
+      - name: Build macOS app
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --onedir --windowed \
+            --name "${APP_NAME}" \
+            --paths src \
+            --collect-all shiny \
+            --add-data "src/XAInyPredictor/data:data" \
+            --add-data "src/XAInyPredictor/shinyapp/www:shinyapp/www" \
+            "src/XAInyPredictor/app.py"
+
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          ditto -c -k --keepParent "${APP_NAME}.app" "${APP_NAME}-${APP_VERSION}-macOS.zip"
+
+      - name: Upload macOS package
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: XAInyPredictor-macOS
+          path: dist/XAInyPredictor-*-macOS.zip
