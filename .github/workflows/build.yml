@@ -51,8 +51,8 @@ jobs:
             --icon "installer/windows/assets/XAInyPredictor.ico" `
             --paths src `
             --collect-all shiny `
-            --add-data "src/XAInyPredictor/data;data" `
-            --add-data "src/XAInyPredictor/shinyapp/www;shinyapp/www" `
+            --add-data "src/XAInyPredictor/data;XAInyPredictor/data" `
+            --add-data "src/XAInyPredictor/shinyapp/www;XAInyPredictor/shinyapp/www" `
             "src/XAInyPredictor/app.py"
 
       - name: Install Inno Setup
@@ -83,8 +83,8 @@ jobs:
             --name "${APP_NAME}" \
             --paths src \
             --collect-all shiny \
-            --add-data "src/XAInyPredictor/data:data" \
-            --add-data "src/XAInyPredictor/shinyapp/www:shinyapp/www" \
+            --add-data "src/XAInyPredictor/data:XAInyPredictor/data" \
+            --add-data "src/XAInyPredictor/shinyapp/www:XAInyPredictor/shinyapp/www" \
             "src/XAInyPredictor/app.py"
 
       - name: Package Linux
@@ -111,8 +111,8 @@ jobs:
             --name "${APP_NAME}" \
             --paths src \
             --collect-all shiny \
-            --add-data "src/XAInyPredictor/data:data" \
-            --add-data "src/XAInyPredictor/shinyapp/www:shinyapp/www" \
+            --add-data "src/XAInyPredictor/data:XAInyPredictor/data" \
+            --add-data "src/XAInyPredictor/shinyapp/www:XAInyPredictor/shinyapp/www" \
             "src/XAInyPredictor/app.py"
 
       - name: Package macOS app
