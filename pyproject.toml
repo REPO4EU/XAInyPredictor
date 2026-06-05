@@ -23,8 +23,7 @@ where = ["src"]
 "XAInyPredictor" = [
     "data/**/*",
     "shinyapp/www/*",
-    "shinyapp/www/static/img/*",
-    "shinyapp/www/pwa/*"
+    "shinyapp/www/static/img/*"
 ]
 
 # set the entrypoint to have executable packages
