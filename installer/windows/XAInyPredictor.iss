@@ -24,6 +24,8 @@ SetupIconFile=assets\XAInyPredictor.ico
 UninstallDisplayIcon={app}\XAInyPredictor.ico
 WizardSmallImageFile=assets\wizard-small.png
 WizardImageFile=assets\wizard-large.png
+CloseApplications=yes
+RestartApplications=no
 
 [Files]
 Source: "..\..\dist\XAInyPredictor\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

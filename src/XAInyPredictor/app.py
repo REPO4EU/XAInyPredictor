@@ -22,7 +22,28 @@ from XAInyPredictor.modules.neoag_processing import prepare_neoantigen_features
 from XAInyPredictor.modules.xai import delta_xai, read_delta_xai_formula, split_data_with_known_target, threshold_for_target_fnr
 
 
-WWW_DIR = Path(__file__).parent / "shinyapp" / "www"
+def _package_resource_dir(*parts: str) -> Path:
+    candidates = []
+
+    if getattr(sys, "frozen", False):
+        bundle_root = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+        candidates.extend(
+            [
+                bundle_root / "XAInyPredictor" / Path(*parts),
+                Path(sys.executable).parent / "_internal" / "XAInyPredictor" / Path(*parts),
+            ]
+        )
+
+    candidates.append(Path(__file__).resolve().parent / Path(*parts))
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return candidates[0]
+
+
+WWW_DIR = _package_resource_dir("shinyapp", "www")
 
 USE_CASES = discover_use_cases()
 _USE_CASE_CACHE = {}
