@@ -19,11 +19,15 @@ def prediction_ui(config=None):
     titles = config.get("titles", {})
     labels = config.get("labels", {})
     help_texts = config.get("help_texts", {})
+    entity = labels.get("entity", {})
+    text = labels.get("text", {})
 
     pos_class_label = labels.get("positive_class_label", "Positive")
     neg_class_label = labels.get("negative_class_label", "Negative")
-    prob_col = labels.get("probability_column", "Stratification Score")
-    class_col = labels.get("class_column", "Patient Group")
+    singular_title = entity.get("singular_title", "Patient")
+    plural = entity.get("plural", "patients")
+    set_title = entity.get("set_title", "Cohort")
+    reference_title = entity.get("reference_title", "Reference Patients")
 
     return ui.layout_sidebar(
         ui.sidebar(
@@ -50,49 +54,30 @@ def prediction_ui(config=None):
                     value=0, min=0, max=100, step=1
                 ),
             ),
-            ui.hr(),
-            ui.h5("Visualization Settings"),
-            ui.input_select(
-                id="view_mode",
-                label="Select View:",
-                choices={
-                    "radar": titles.get("feature_analysis_short", "Profile Comparison"),
-                    "curve": titles.get("distance_analysis_short", "Feature Curves")
-                },
-                selected="radar",
-            ),
-            ui.output_ui("features_to_plot_ui"),
-            ui.panel_conditional(
-                "input.view_mode == 'radar'",
-                ui.input_checkbox_group(
-                    id="radar_plot_elements",
-                    label="Radar Plot Elements:",
-                    choices={
-                        "closest": "Closest patients",
-                        "average": "Average all patients",
-                        "average_0": f"Avg. {neg_class_label}",
-                        "average_1": f"Avg. {pos_class_label}",
-                    },
-                    selected=["closest", "average", "average_0", "average_1"],
-                ),
-            ),
         ),
         ui.page_fluid(
             ui.div(
-                ui.div("Stratification Analysis", class_="stratification-tabset-title"),
+                ui.div(ui.output_ui("analysis_title_header"), class_="stratification-tabset-title"),
                 ui.navset_tab(
                 ui.nav_panel(
-                    "Patient",
+                    singular_title,
                     ui.div(
-                        ui.download_button("download_report_package", "Download report package", class_="btn-primary btn-sm report-package-download"),
-                        ui.download_button("download_stratification_results", "Download stratification results", class_="btn-default btn-sm"),
-                        ui.download_button("download_closest_patients", "Download closest patients", class_="btn-default btn-sm"),
-                        ui.download_button("download_cohort_summary", "Download cohort summary", class_="btn-default btn-sm"),
+                        ui.tags.details(
+                            ui.tags.summary(text.get("download_menu", "Download outputs")),
+                            ui.div(
+                                ui.download_button("download_report_package", text.get("download_report_package", "Report package"), class_="btn-primary btn-sm report-package-download"),
+                                ui.download_button("download_stratification_results", text.get("download_results", "Stratification results"), class_="btn-default btn-sm"),
+                                ui.download_button("download_closest_patients", text.get("download_closest", "Closest reference candidates"), class_="btn-default btn-sm"),
+                                ui.download_button("download_cohort_summary", text.get("download_summary", "Cohort summary"), class_="btn-default btn-sm"),
+                                class_="stratification-download-menu",
+                            ),
+                            class_="stratification-download-details",
+                        ),
                         class_="stratification-downloads",
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("Selected Patient Stratification"),
+                            ui.card_header(ui.output_ui("selected_output_header")),
                             ui.output_ui("stratification_summary"),
                             ui.output_ui("stratification_interpretation"),
                             class_="selected-patient-stratification-card",
@@ -101,37 +86,74 @@ def prediction_ui(config=None):
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header(
-                                ui.div(
-                                    titles.get("prediction_results", "Prediction results "),
-                                    ui.popover(
-                                        ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
-                                        ui.tags.div(
-                                            ui.tags.b("Stratification results:"),
-                                            ui.tags.p("The table shows the model-based patient stratification:"),
-                                            ui.tags.ul(
-                                                ui.tags.li(ui.tags.b(f"{prob_col}:"), f" Indicates the score used to assign the patient group."),
-                                                ui.tags.li(ui.tags.b(f"{class_col}:"), f" Assigns the patient to {pos_class_label} or {neg_class_label}."),
-                                            ),
-                                            style="width: 250px;"
-                                        ),
-                                        placement="right"
-                                    )
-                                )
-                            ),
+                            ui.card_header(ui.output_ui("results_table_header")),
                             ui.output_data_frame("results_table_output"),
                             height="240px",
                         ),
                         col_widths=12,
                     ),
+                    ui.card(
+                        ui.card_header("Profile controls"),
+                        ui.div(
+                            ui.div(
+                                ui.div(
+                                    ui.input_select(
+                                        id="view_mode",
+                                        label="Select View:",
+                                        choices={
+                                            "radar": titles.get("feature_analysis_short", "Profile Comparison"),
+                                            "curve": titles.get("distance_analysis_short", "Feature Curves")
+                                        },
+                                        selected="radar",
+                                    ),
+                                    class_="patient-visual-setting patient-visual-setting-view",
+                                ),
+                                ui.div(
+                                    ui.input_action_button("btn_select_default_features", "Top features", class_="btn-default btn-sm feature-control-button"),
+                                    ui.input_action_button("btn_clear_features", "Clear", class_="btn-default btn-sm feature-control-button"),
+                                    class_="feature-control-row",
+                                ),
+                                class_="patient-visual-controls-top",
+                            ),
+                            ui.div(
+                                ui.div(
+                                    ui.output_ui("features_to_plot_ui"),
+                                    class_="feature-selector-inline",
+                                ),
+                                class_="patient-visual-setting patient-visual-setting-features",
+                            ),
+                            ui.div(
+                                ui.panel_conditional(
+                                    "input.view_mode == 'radar'",
+                                    ui.div(
+                                        ui.input_checkbox_group(
+                                            id="radar_plot_elements",
+                                            label="Radar Plot Elements:",
+                                            choices={
+                                                "closest": text.get("radar_closest", f"Closest {plural}"),
+                                                "average": text.get("radar_average", f"Average all {plural}"),
+                                                "average_0": f"Avg. {neg_class_label}",
+                                                "average_1": f"Avg. {pos_class_label}",
+                                            },
+                                            selected=["closest", "average", "average_0", "average_1"],
+                                        ),
+                                        class_="patient-visual-setting patient-visual-setting-radar",
+                                    ),
+                                ),
+                                class_="patient-visual-radar-wrap",
+                            ),
+                            class_="patient-visual-settings-grid",
+                        ),
+                        class_="patient-visual-settings-card",
+                    ),
                     ui.output_ui("dynamic_plot_container"),
                     value="patient",
                 ),
                 ui.nav_panel(
-                    "Cohort",
+                    set_title,
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header("Cohort Stratification Summary"),
+                            ui.card_header(ui.output_ui("set_summary_header")),
                             ui.output_ui("cohort_stratification_summary"),
                             height="180px",
                         ),
@@ -139,20 +161,7 @@ def prediction_ui(config=None):
                     ),
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header(
-                                ui.div(
-                                    "Cohort Score Distribution ",
-                                    ui.popover(
-                                        ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
-                                        ui.tags.div(
-                                            ui.tags.b("Cohort score distribution:"),
-                                            ui.tags.p("Patients are ordered by stratification score. The dashed line marks the current decision threshold and the selected patient is highlighted."),
-                                            style="width: 250px;"
-                                        ),
-                                        placement="right"
-                                    )
-                                )
-                            ),
+                            ui.card_header(ui.output_ui("set_distribution_header")),
                             ui.output_plot("cohort_score_distribution_plot", height="420px", width="100%"),
                             full_screen=True,
                         ),
@@ -194,25 +203,12 @@ def prediction_ui(config=None):
                     value="model",
                 ),
                 ui.nav_panel(
-                    "Reference Patients",
+                    reference_title,
                     ui.layout_columns(
                         ui.card(
-                            ui.card_header(
-                                ui.div(
-                                    "Closest Reference Patients ",
-                                    ui.popover(
-                                        ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
-                                        ui.tags.div(
-                                            ui.tags.b("Closest reference patients:"),
-                                            ui.tags.p("Reference patients are ranked by distance in the model contribution space, using the same feature effects that drive the explanation plots."),
-                                            style="width: 260px;"
-                                        ),
-                                        placement="right"
-                                    )
-                                )
-                            ),
+                            ui.card_header(ui.output_ui("closest_reference_header")),
                             ui.output_ui("closest_reference_patients_narrative"),
-                            ui.output_data_frame("closest_reference_patients_table"),
+                            ui.output_ui("closest_reference_patients_table"),
                             height="420px",
                             full_screen=True,
                         ),
@@ -231,18 +227,29 @@ def prediction_ui(config=None):
 
 @module.server
 def server(input: Inputs, output: Outputs, session: Session, global_input_data, patient_selected_id, model_data, delta_test_reactive, x_test_reactive, prob_threshold, config_init, config_reactive=None):
+    selection_revision = reactive.Value(0)
 
     @reactive.Calc
     def current_labels():
         current_cfg = config_reactive.get() if config_reactive else (config_init or {})
         labels = current_cfg.get("labels", {})
+        entity = labels.get("entity", {})
         return {
             "positive_class": current_cfg.get("positive_class", "YES"),
             "negative_class": current_cfg.get("negative_class", "NO"),
             "positive_class_label": labels.get("positive_class_label", "Positive"),
             "negative_class_label": labels.get("negative_class_label", "Negative"),
             "probability_column": labels.get("probability_column", "Stratification Score"),
-            "class_column": labels.get("class_column", "Patient Group")
+            "class_column": labels.get("class_column", "Patient Group"),
+            "singular": entity.get("singular", "patient"),
+            "plural": entity.get("plural", "patients"),
+            "singular_title": entity.get("singular_title", "Patient"),
+            "plural_title": entity.get("plural_title", "Patients"),
+            "set_lower": entity.get("set_lower", "cohort"),
+            "set_title": entity.get("set_title", "Cohort"),
+            "reference_plural": entity.get("reference_plural", "reference patients"),
+            "reference_title": entity.get("reference_title", "Reference Patients"),
+            "text": labels.get("text", {}),
         }
 
     @reactive.Calc
@@ -251,6 +258,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
     @reactive.Calc
     def stratification_results_df():
+        selection_revision.get()
         df = global_input_data.get()
         delta_test = delta_test_reactive.get()
         prob_thr = prob_threshold.get()
@@ -259,6 +267,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         if df is None or delta_test is None or df.empty or delta_test.empty:
             return None
         if "ID" not in df.columns or "pred_prob" not in delta_test.columns:
+            return None
+        if len(df) != len(delta_test):
             return None
 
         threshold = float(prob_thr) if prob_thr is not None else 0
@@ -269,6 +279,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             ],
             axis=1,
         )
+        res_df["ID"] = res_df["ID"].astype(int)
         res_df = res_df.rename(columns={"pred_prob": lbls["probability_column"]})
         res_df[lbls["class_column"]] = np.where(
             res_df[lbls["probability_column"]] >= threshold,
@@ -285,12 +296,22 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             return []
         return [col for col in delta_df.columns if col not in ["const", "pred_prob"]]
 
+    def _selected_entity_id():
+        sel_id = patient_selected_id.get()
+        if sel_id is None or sel_id == "" or sel_id == "None":
+            return None
+        try:
+            return int(sel_id)
+        except (TypeError, ValueError):
+            return None
+
     @reactive.Calc
     def closest_reference_patients_df():
+        selection_revision.get()
         raw_df = global_input_data.get()
         delta_test = delta_test_reactive.get()
         md = model_data.get()
-        sel_id = patient_selected_id.get()
+        sel_id = _selected_entity_id()
         lbls = current_labels()
         threshold = float(prob_threshold.get()) if prob_threshold.get() is not None else 0
 
@@ -303,13 +324,17 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             or delta_test.empty
         ):
             return None
-
-        delta_train = md.get("D_TRAIN")
-        x_train_raw = md.get("X_TRAIN_RAW")
-        if delta_train is None or x_train_raw is None or delta_train.empty or x_train_raw.empty:
+        if len(raw_df) != len(delta_test):
             return None
 
-        patient_rows = raw_df.index[raw_df["ID"] == int(sel_id)].tolist()
+        raw_df = raw_df.reset_index(drop=True)
+        delta_test = delta_test.reset_index(drop=True)
+
+        delta_train = md.get("D_TRAIN")
+        if delta_train is None or delta_train.empty:
+            return None
+
+        patient_rows = raw_df.index[raw_df["ID"].astype(int) == sel_id].tolist()
         if not patient_rows:
             return None
         patient_pos = patient_rows[0]
@@ -327,29 +352,16 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         distances = np.linalg.norm(train_matrix - patient_vector, axis=1)
         closest_positions = np.argsort(distances)[:5]
 
-        feature_candidates = list(input.features_to_plot() or [])
-        if not feature_candidates:
-            feature_candidates = [_feature_display_name(col) for col in feature_cols[:4]]
-        feature_candidates = feature_candidates[:4]
-
         rows = []
-        x_train_display = x_train_raw.copy()
-        x_train_display.columns = [col.replace("_", " ") for col in x_train_display.columns]
-
         for pos in closest_positions:
-            train_row = x_train_display.iloc[int(pos)]
             score = float(delta_train.iloc[int(pos)]["pred_prob"])
             group = lbls["positive_class_label"] if score >= threshold else lbls["negative_class_label"]
             row = {
-                "Reference ID": int(train_row["ID"]) if "ID" in train_row else int(pos) + 1,
+                "Reference Rank": len(rows) + 1,
                 "Distance": round(float(distances[int(pos)]), 3),
                 lbls["probability_column"]: round(score, 3),
                 lbls["class_column"]: group,
             }
-            for feature in feature_candidates:
-                display_feature = _feature_display_name(feature)
-                if display_feature in train_row.index:
-                    row[display_feature] = train_row[display_feature]
             rows.append(row)
 
         return pd.DataFrame(rows)
@@ -366,7 +378,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         class_col = lbls["class_column"]
         total = len(res_df)
         rows = [
-            {"Metric": "Patients", "Value": total},
+            {"Metric": lbls["plural_title"], "Value": total},
             {"Metric": "Mean score", "Value": round(float(res_df[prob_col].mean()), 3)},
             {"Metric": "Decision threshold", "Value": round(float(prob_threshold.get() or 0), 3)},
         ]
@@ -379,7 +391,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         cfg = current_config()
         lbls = current_labels()
         input_df = global_input_data.get()
-        patient_count = 0 if input_df is None else len(input_df)
+        item_count = 0 if input_df is None else len(input_df)
         threshold = float(prob_threshold.get()) if prob_threshold.get() is not None else 0
 
         return {
@@ -389,7 +401,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             "Decision Threshold": round(threshold, 3),
             "Negative Group": lbls["negative_class_label"],
             "Positive Group": lbls["positive_class_label"],
-            "Patient Count": patient_count,
+            f"{lbls['singular_title']} Count": item_count,
             "Exported At": datetime.now().isoformat(timespec="seconds"),
             "Output Type": "Research prototype; clinical workflow utility should be validated with collaborators",
         }
@@ -419,19 +431,38 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
     def _report_readme_text():
         metadata = _export_metadata()
+        lbls = current_labels()
+        text = lbls["text"]
+        closest_reference_file = f"closest_reference_{_slug_for_filename(lbls['plural'])}.csv"
+        set_summary_file = f"{_slug_for_filename(lbls['set_lower'])}_stratification_summary.csv"
         return (
             "XAInyPredictor report package\n"
             "============================\n\n"
             f"Use case: {metadata.get('Use Case', 'Unknown use case')}\n"
             f"Exported at: {metadata.get('Exported At', '')}\n\n"
             "Files included:\n"
-            "- metadata.csv: use case, threshold, patient groups, export timestamp, and prototype context.\n"
-            "- stratification_results.csv: patient-level stratification score and assigned patient group.\n"
-            "- cohort_stratification_summary.csv: cohort-level counts, score summary, and metadata.\n"
-            "- closest_reference_patients.csv: closest reference patients for the selected patient when available.\n\n"
-            "Prototype context:\n"
-            "This package supports patient stratification research. Clinical workflow utility and interpretation should be validated with clinical collaborators.\n"
+            f"- metadata.csv: use case, threshold, {lbls['class_column'].lower()}, export timestamp, and prototype context.\n"
+            f"- stratification_results.csv: {lbls['singular']}-level stratification score and assigned group.\n"
+            f"- {set_summary_file}: {lbls['set_lower']}-level counts, score summary, and metadata.\n"
+            f"- {closest_reference_file}: anonymized closest-reference ranks, distances, scores, and classes for the selected {lbls['singular']} when available.\n\n"
+            "Prototype context:\n" +
+            text.get(
+                "report_context",
+                "This package supports patient stratification research. Clinical workflow utility and interpretation should be validated with clinical collaborators.",
+            ) + "\n"
         )
+
+    def _slug_for_filename(value):
+        slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in str(value))
+        return "_".join(part for part in slug.split("_") if part)
+
+    def _closest_reference_filename():
+        lbls = current_labels()
+        return f"closest_reference_{_slug_for_filename(lbls['plural'])}.csv"
+
+    def _set_summary_filename():
+        lbls = current_labels()
+        return f"{_slug_for_filename(lbls['set_lower'])}_stratification_summary.csv"
 
     def _run_patient_analysis(data, feats, opts=None):
         if not data:
@@ -456,6 +487,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                 show_average_class1_radial="average_1" in opts,
                 neg_class_label=lbls["negative_class_label"],
                 pos_class_label=lbls["positive_class_label"],
+                entity_label=lbls["singular_title"],
             )
         except Exception:
             return None, None
@@ -474,8 +506,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         ui.update_checkbox_group(
             "radar_plot_elements",
             choices={
-                "closest": "Closest patients",
-                "average": "Average all patients",
+                "closest": lbls["text"].get("radar_closest", f"Closest {lbls['plural']}"),
+                "average": lbls["text"].get("radar_average", f"Average all {lbls['plural']}"),
                 "average_0": f"Avg. {neg}",
                 "average_1": f"Avg. {pos}",
             },
@@ -490,12 +522,105 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             return
 
         all_ids = sorted(df["ID"].astype(int).tolist())
-        current_selection = patient_selected_id.get()
+        current_selection = _selected_entity_id()
         if current_selection is None or int(current_selection) not in all_ids:
             patient_selected_id.set(all_ids[0])
             ui.update_selectize("local_patient_select", selected=all_ids[0])
 
-    @output
+    @output(suspend_when_hidden=False)
+    @render.ui
+    def analysis_title_header():
+        lbls = current_labels()
+        return lbls["text"].get("analysis_title", "Stratification Analysis")
+
+    @output(suspend_when_hidden=False)
+    @render.ui
+    def selected_output_header():
+        lbls = current_labels()
+        return lbls["text"].get(
+            "selected_output_title",
+            f"Selected {lbls['singular_title']} Stratification",
+        )
+
+    @output(suspend_when_hidden=False)
+    @render.ui
+    def results_table_header():
+        cfg = current_config()
+        titles = cfg.get("titles", {})
+        lbls = current_labels()
+        text = lbls["text"]
+        prob_col = lbls["probability_column"]
+        class_col = lbls["class_column"]
+        return ui.div(
+            titles.get("prediction_results", "Prediction results "),
+            ui.popover(
+                ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
+                ui.tags.div(
+                    ui.tags.b(text.get("results_table_help_title", "Stratification results:")),
+                    ui.tags.p(text.get("results_table_help", f"The table shows model-based {lbls['singular']} stratification:")),
+                    ui.tags.ul(
+                        ui.tags.li(ui.tags.b(f"{prob_col}:"), text.get("score_help", f" Indicates the score used to assign the {lbls['singular']} class.")),
+                        ui.tags.li(ui.tags.b(f"{class_col}:"), text.get("class_help", f" Assigns the {lbls['singular']} to {lbls['positive_class_label']} or {lbls['negative_class_label']}.")),
+                    ),
+                    style="width: 250px;",
+                ),
+                placement="right",
+            ),
+        )
+
+    @output(suspend_when_hidden=False)
+    @render.ui
+    def set_summary_header():
+        lbls = current_labels()
+        return lbls["text"].get("set_summary_title", f"{lbls['set_title']} Stratification Summary")
+
+    @output(suspend_when_hidden=False)
+    @render.ui
+    def set_distribution_header():
+        lbls = current_labels()
+        text = lbls["text"]
+        return ui.div(
+            text.get("set_distribution_title", f"{lbls['set_title']} Score Distribution "),
+            ui.popover(
+                ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
+                ui.tags.div(
+                    ui.tags.b(text.get("set_distribution_help_title", f"{lbls['set_title']} score distribution:")),
+                    ui.tags.p(
+                        text.get(
+                            "set_distribution_help",
+                            f"{lbls['plural_title']} are ordered by stratification score. The dashed line marks the current decision threshold and the selected {lbls['singular']} is highlighted.",
+                        )
+                    ),
+                    style="width: 250px;",
+                ),
+                placement="right",
+            ),
+        )
+
+    @output(suspend_when_hidden=False)
+    @render.ui
+    def closest_reference_header():
+        lbls = current_labels()
+        text = lbls["text"]
+        return ui.div(
+            text.get("closest_reference_title", f"Closest {lbls['reference_title']} "),
+            ui.popover(
+                ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
+                ui.tags.div(
+                    ui.tags.b(text.get("closest_reference_help_title", f"Closest {lbls['reference_plural']}:")),
+                    ui.tags.p(
+                        text.get(
+                            "closest_reference_help",
+                            f"{lbls['reference_title']} are ranked by distance in the model contribution space, using the same feature effects that drive the explanation plots.",
+                        )
+                    ),
+                    style="width: 260px;",
+                ),
+                placement="right",
+            ),
+        )
+
+    @output(suspend_when_hidden=False)
     @render.ui
     def patient_selector_ui():
         """
@@ -503,15 +628,16 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         global_input_data variable and according to this, it creates a dropdown
         to select patients.
         """
+        lbls = current_labels()
         df = global_input_data.get()
         if df is None or df.empty or 'ID' not in df.columns:
-            return ui.p("Add or upload patients in Data Input to generate stratification outputs.")
+            return ui.p(lbls["text"].get("empty_results_message", f"Add or upload {lbls['plural']} in Data Input to generate stratification outputs."))
         
         # Get list of patient IDs
         all_ids = sorted(df['ID'].astype(int).tolist())
 
         # Check current selection from global state
-        current_selection = patient_selected_id.get()
+        current_selection = _selected_entity_id()
 
         # Default to first if no current selection
         if current_selection is None or int(current_selection) not in all_ids:
@@ -521,18 +647,18 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
         return ui.input_selectize(
             id="local_patient_select",
-            label="Select patient:",
+            label=lbls["text"].get("select_entity_label", f"Select {lbls['singular']}:"),
             choices=all_ids,
             selected=selected_val,
             options={
                 "create": False,  # Don't allow creating new options
                 "allowEmptyOption": False,
-                "placeholder": "Search by patient ID...",
+                "placeholder": lbls["text"].get("search_entity_placeholder", f"Search by {lbls['singular']} ID..."),
                 "maxItems": 1
             }
         )
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.ui
     def features_to_plot_ui():
         """
@@ -541,21 +667,48 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         features that appear in the formula (discarding the ones that do not appear).
         """
         md = model_data.get()
+        cfg = current_config()
         feature_names = md.get("FEATURE_ORDER_DISPLAY", []) if md else []
         features_to_plot = md.get("FEATS_IN_FORMULA", []) if md else []
+        max_default_features = cfg.get("default_selected_features")
+        if max_default_features:
+            features_to_plot = features_to_plot[:int(max_default_features)]
         return ui.input_selectize(
             id="features_to_plot",
             label="Select features to view:",
             choices=feature_names,
             selected=features_to_plot,
             multiple=True,
+            options={
+                "plugins": ["remove_button"],
+                "maxOptions": 100,
+                "placeholder": "Choose features",
+            },
         )
 
-    @output
+    @reactive.Effect
+    @reactive.event(input.btn_select_default_features)
+    def _select_default_features():
+        md = model_data.get()
+        cfg = current_config()
+        if not md:
+            return
+        features_to_plot = md.get("FEATS_IN_FORMULA", [])
+        max_default_features = cfg.get("default_selected_features", 5)
+        features_to_plot = features_to_plot[:int(max_default_features)]
+        ui.update_selectize("features_to_plot", selected=features_to_plot)
+
+    @reactive.Effect
+    @reactive.event(input.btn_clear_features)
+    def _clear_features():
+        ui.update_selectize("features_to_plot", selected=[])
+
+    @output(suspend_when_hidden=False)
     @render.ui
     def dynamic_plot_container():
         mode = input.view_mode()
         selected_features = input.features_to_plot()
+        cfg = current_config()
 
         lbls = current_labels()
         neg = lbls["negative_class_label"]
@@ -564,24 +717,25 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         # Calculate dynamic height for Curve plot
         # Base height + (pixels per feature * number of features)
         n_feats = len(selected_features) if selected_features else 0
-        curve_height_px = 300 + (n_feats * 250) 
+        max_curve_features = int(cfg.get("max_curve_features", 8))
+        curve_height_px = 300 + (min(n_feats, max_curve_features) * 210)
         
         # Define UI cards
         radar_card = ui.card(
             ui.card_header(
                 ui.div(
-                    "Patient Profile Comparison ",
+                    lbls["text"].get("profile_comparison_title", "Patient Profile Comparison "),
                     ui.popover(
                         ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
                         ui.tags.div(
                             ui.tags.b("Understanding the radar plot:"),
-                            ui.tags.p("The radar plot compares the values of the features from a selected patient (red) with three different distributions:"),
+                            ui.tags.p(lbls["text"].get("radar_help_intro", f"The radar plot compares the values of the features from a selected {lbls['singular']} (red) with three different distributions:")),
                             ui.tags.ul(
-                                ui.tags.li(ui.tags.b("Average all patients:"), " The average values from all patients in the model (blue)."),
-                                ui.tags.li(ui.tags.b(f"Avg. {neg}:"), f" The average values from all {neg} patients in the model (green)."),
-                                ui.tags.li(ui.tags.b(f"Avg. {pos}:"), f" The average values from all {pos} patients in the model (yellow)."),
+                                ui.tags.li(ui.tags.b(f"Average all {lbls['plural']}:"), f" The average values from all {lbls['plural']} in the model (blue)."),
+                                ui.tags.li(ui.tags.b(f"Avg. {neg}:"), f" The average values from all {neg} {lbls['plural']} in the model (green)."),
+                                ui.tags.li(ui.tags.b(f"Avg. {pos}:"), f" The average values from all {pos} {lbls['plural']} in the model (yellow)."),
                             ),
-                            ui.tags.p("Comparing these values helps contextualize why the selected patient falls into a given stratification group."),
+                            ui.tags.p(lbls["text"].get("radar_help_outro", f"Comparing these values helps contextualize why the selected {lbls['singular']} falls into a given stratification group.")),
                             style="width: 250px;"
                         ),
                         placement="right"
@@ -601,7 +755,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                         ui.span(ui.tags.i(class_="glyphicon glyphicon-info-sign"), "", style="color: #007bc2; cursor: pointer; font-size: 0.9em;"),
                         ui.tags.div(
                             ui.tags.b("Understanding the curves plot:"),
-                            ui.tags.p("The curves plot displays the distribution of values from a specific feature across the patients in the model, ordered from lowest to highest (blue dots). It highlights in red the patient selected, put in context the feature values of the patient in comparison with the values from the rest of patients."),
+                            ui.tags.p(lbls["text"].get("curves_help", f"The curves plot displays the distribution of values from a specific feature across the {lbls['plural']} in the model, ordered from lowest to highest (blue dots). It highlights in red the selected {lbls['singular']}, putting its feature values in context.")),
                             style="width: 250px;"
                         ),
                         placement="right"
@@ -636,6 +790,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         try:
             new_value = int(val)
             patient_selected_id.set(new_value)
+            with reactive.isolate():
+                selection_revision.set(selection_revision.get() + 1)
         except ValueError:
             # If conversion fails, don't update and optionally show notification
             # ui.notification_show("Invalid patient ID selected", type="error")
@@ -652,7 +808,14 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         md = model_data.get()
         y_test = md.get("Y_TEST") if md else None
 
-        if y_test is None or delta_test is None:
+        if (
+            y_test is None
+            or delta_test is None
+            or delta_test.empty
+            or "pred_prob" not in delta_test.columns
+        ):
+            return
+        if len(y_test) != len(delta_test):
             return
 
         try:
@@ -680,6 +843,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
     @reactive.Calc
     def get_patient_data_context():
+        selection_revision.get()
         """
         Gathers all the dataframes and IDs needed for analysis.
         Returns a dictionary of data or None if invalid.
@@ -687,7 +851,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         raw_df = global_input_data.get()
         delta_test = delta_test_reactive.get()
         x_test = x_test_reactive.get()
-        patient_id = patient_selected_id.get()
+        patient_id = _selected_entity_id()
 
         md = model_data.get()
         if md is None:
@@ -700,6 +864,12 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         # Validation checks
         if any((x is None) or (isinstance(x, pd.DataFrame) and x.empty) for x in [raw_df, delta_train, delta_test, x_train, y_train, patient_id]):
             return None
+        if len(raw_df) != len(delta_test) or len(raw_df) != len(x_test):
+            return None
+
+        raw_df = raw_df.reset_index(drop=True)
+        delta_test = delta_test.reset_index(drop=True)
+        x_test = x_test.reset_index(drop=True)
 
         all_ids = sorted(raw_df['ID'].astype(int).tolist())
         if patient_id == None or int(patient_id) not in all_ids:
@@ -726,110 +896,130 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
     # --- Outputs ---
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.ui
     def stratification_summary():
-        sel_id = patient_selected_id.get()
-        prob_thr = prob_threshold.get()
-        lbls = current_labels()
-        res_df = stratification_results_df()
+        try:
+            sel_id = _selected_entity_id()
+            prob_thr = prob_threshold.get()
+            lbls = current_labels()
+            res_df = stratification_results_df()
 
-        prob_col = lbls["probability_column"]
-        class_col = lbls["class_column"]
+            prob_col = lbls["probability_column"]
+            class_col = lbls["class_column"]
 
-        if res_df is None or res_df.empty or sel_id is None:
-            return ui.div("Add or upload patients to review individual stratification outputs.", class_="stratification-summary-empty")
+            if res_df is None or res_df.empty or sel_id is None:
+                return ui.div(lbls["text"].get("empty_individual_summary", f"Add or upload {lbls['plural']} to review individual stratification outputs."), class_="stratification-summary-empty")
 
-        patient_row = res_df[res_df["ID"] == sel_id]
-        if patient_row.empty:
-            return ui.div("Selected patient not found.", class_="stratification-summary-empty")
+            patient_row = res_df[res_df["ID"].astype(int) == sel_id]
+            if patient_row.empty:
+                return ui.div(lbls["text"].get("selected_entity_not_found", f"Selected {lbls['singular']} not found."), class_="stratification-summary-empty")
 
-        score = float(patient_row[prob_col].iloc[0])
-        threshold = float(prob_thr) if prob_thr is not None else 0
-        group = str(patient_row[class_col].iloc[0])
-        group_class = "stratification-positive" if group == lbls["positive_class_label"] else "stratification-negative"
+            score = float(patient_row[prob_col].iloc[0])
+            threshold = float(prob_thr) if prob_thr is not None else 0
+            group = str(patient_row[class_col].iloc[0])
+            group_class = "stratification-positive" if group == lbls["positive_class_label"] else "stratification-negative"
 
-        return ui.div(
-            ui.div(
-                ui.div("Patient", class_="stratification-summary-label"),
-                ui.div(f"{int(sel_id)}", class_="stratification-summary-value"),
-                class_="stratification-summary-item",
-            ),
-            ui.div(
-                ui.div(prob_col, class_="stratification-summary-label"),
-                ui.div(f"{score:.3f}", class_="stratification-summary-value"),
-                class_="stratification-summary-item",
-            ),
-            ui.div(
-                ui.div("Decision Threshold", class_="stratification-summary-label"),
-                ui.div(f"{threshold:.3f}", class_="stratification-summary-value"),
-                class_="stratification-summary-item",
-            ),
-            ui.div(
-                ui.div(class_col, class_="stratification-summary-label"),
-                ui.div(group, class_=f"stratification-summary-value {group_class}"),
-                class_="stratification-summary-item",
-            ),
-            class_="stratification-summary",
-        )
+            return ui.div(
+                ui.div(
+                    ui.div(lbls["singular_title"], class_="stratification-summary-label"),
+                    ui.div(f"{int(sel_id)}", class_="stratification-summary-value"),
+                    class_="stratification-summary-item",
+                ),
+                ui.div(
+                    ui.div(prob_col, class_="stratification-summary-label"),
+                    ui.div(f"{score:.3f}", class_="stratification-summary-value"),
+                    class_="stratification-summary-item",
+                ),
+                ui.div(
+                    ui.div("Decision Threshold", class_="stratification-summary-label"),
+                    ui.div(f"{threshold:.3f}", class_="stratification-summary-value"),
+                    class_="stratification-summary-item",
+                ),
+                ui.div(
+                    ui.div(class_col, class_="stratification-summary-label"),
+                    ui.div(group, class_=f"stratification-summary-value {group_class}"),
+                    class_="stratification-summary-item",
+                ),
+                class_="stratification-summary",
+            )
+        except Exception as exc:
+            return ui.div(f"Unable to update selected stratification: {exc}", class_="stratification-summary-empty")
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.ui
     def stratification_interpretation():
-        sel_id = patient_selected_id.get()
-        prob_thr = prob_threshold.get()
-        lbls = current_labels()
-        res_df = stratification_results_df()
+        try:
+            sel_id = _selected_entity_id()
+            prob_thr = prob_threshold.get()
+            lbls = current_labels()
+            res_df = stratification_results_df()
 
-        if res_df is None or res_df.empty or sel_id is None:
-            return None
+            if res_df is None or res_df.empty or sel_id is None:
+                return None
 
-        prob_col = lbls["probability_column"]
-        class_col = lbls["class_column"]
-        patient_row = res_df[res_df["ID"] == sel_id]
-        if patient_row.empty:
-            return None
+            prob_col = lbls["probability_column"]
+            class_col = lbls["class_column"]
+            patient_row = res_df[res_df["ID"].astype(int) == sel_id]
+            if patient_row.empty:
+                return None
 
-        score = float(patient_row[prob_col].iloc[0])
-        threshold = float(prob_thr) if prob_thr is not None else 0
-        group = str(patient_row[class_col].iloc[0])
-        direction = "above or equal to" if score >= threshold else "below"
-        positive_label = lbls["positive_class_label"]
-        negative_label = lbls["negative_class_label"]
+            score = float(patient_row[prob_col].iloc[0])
+            threshold = float(prob_thr) if prob_thr is not None else 0
+            group = str(patient_row[class_col].iloc[0])
+            direction = "above or equal to" if score >= threshold else "below"
+            positive_label = lbls["positive_class_label"]
+            negative_label = lbls["negative_class_label"]
+            interpretation = lbls["text"].get(
+                "stratification_interpretation",
+                f"This {lbls['singular']} is assigned to {group} because the stratification score ({score:.3f}) is {direction} the decision threshold ({threshold:.3f}).",
+            )
 
-        return ui.div(
-            ui.p(
-                f"This patient is assigned to {group} because the stratification score ({score:.3f}) is {direction} the decision threshold ({threshold:.3f}).",
-                class_="stratification-interpretation-main",
-            ),
-            ui.div(
-                ui.div(
-                    ui.tags.b(f"Below threshold: "),
-                    f"assigned to {negative_label}.",
-                    class_="stratification-rule stratification-rule-negative",
+            return ui.div(
+                ui.p(
+                    interpretation.format(
+                        entity=lbls["singular"],
+                        entity_title=lbls["singular_title"],
+                        group=group,
+                        score=f"{score:.3f}",
+                        threshold=f"{threshold:.3f}",
+                        direction=direction,
+                    ),
+                    class_="stratification-interpretation-main",
                 ),
                 ui.div(
-                    ui.tags.b(f"At or above threshold: "),
-                    f"assigned to {positive_label}.",
-                    class_="stratification-rule stratification-rule-positive",
+                    ui.div(
+                        ui.tags.b(f"Below threshold: "),
+                        f"assigned to {negative_label}.",
+                        class_="stratification-rule stratification-rule-negative",
+                    ),
+                    ui.div(
+                        ui.tags.b(f"At or above threshold: "),
+                        f"assigned to {positive_label}.",
+                        class_="stratification-rule stratification-rule-positive",
+                    ),
+                    class_="stratification-rules",
                 ),
-                class_="stratification-rules",
-            ),
-            ui.p(
-                "Research prototype output: this stratification supports cohort-level clinical decision support research and should be interpreted with clinical collaborators during utility validation.",
-                class_="stratification-disclaimer",
-            ),
-            class_="stratification-interpretation",
-        )
+                ui.p(
+                    lbls["text"].get(
+                        "stratification_disclaimer",
+                        "Research prototype output: this stratification supports cohort-level clinical decision support research and should be interpreted with clinical collaborators during utility validation.",
+                    ),
+                    class_="stratification-disclaimer",
+                ),
+                class_="stratification-interpretation",
+            )
+        except Exception as exc:
+            return ui.div(f"Unable to update selected stratification explanation: {exc}", class_="stratification-summary-empty")
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.ui
     def cohort_stratification_summary():
         res_df = stratification_results_df()
         lbls = current_labels()
 
         if res_df is None or res_df.empty:
-            return ui.div("Add or upload patients to summarize cohort-level stratification.", class_="stratification-summary-empty")
+            return ui.div(lbls["text"].get("empty_set_summary", f"Add or upload {lbls['plural']} to summarize {lbls['set_lower']}-level stratification."), class_="stratification-summary-empty")
 
         prob_col = lbls["probability_column"]
         class_col = lbls["class_column"]
@@ -845,7 +1035,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
         return ui.div(
             ui.div(
-                ui.div("Patients", class_="stratification-summary-label"),
+                ui.div(lbls["plural_title"], class_="stratification-summary-label"),
                 ui.div(str(total), class_="stratification-summary-value"),
                 class_="stratification-summary-item",
             ),
@@ -867,7 +1057,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             class_="stratification-summary",
         )
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.ui
     def model_card():
         cfg = current_config()
@@ -906,7 +1096,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     class_="model-card-item",
                 ),
                 ui.div(
-                    ui.div("Reference cohort", class_="model-card-label"),
+                    ui.div(lbls["text"].get("reference_set_label", "Reference cohort"), class_="model-card-label"),
                     ui.div(str(reference_n), class_="model-card-value"),
                     class_="model-card-item",
                 ),
@@ -916,7 +1106,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     class_="model-card-item",
                 ),
                 ui.div(
-                    ui.div("Patient groups", class_="model-card-label"),
+                    ui.div(lbls["text"].get("groups_label", "Patient groups"), class_="model-card-label"),
                     ui.div(f"{lbls['negative_class_label']} / {lbls['positive_class_label']}", class_="model-card-value"),
                     class_="model-card-item model-card-groups",
                 ),
@@ -938,8 +1128,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                 class_="model-card-note",
             ),
             ui.div(
-                ui.div("Reference cohort source", class_="model-card-label"),
-                ui.p(metadata.get("cohort_source", "Reference cohort source not specified."), class_="model-card-copy"),
+                ui.div(lbls["text"].get("reference_source_label", "Reference cohort source"), class_="model-card-label"),
+                ui.p(metadata.get("cohort_source", lbls["text"].get("reference_source_missing", "Reference cohort source not specified.")), class_="model-card-copy"),
                 class_="model-card-note",
             ),
             ui.div(
@@ -964,16 +1154,19 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             ),
         )
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.plot
     def cohort_score_distribution_plot():
+        if input.stratification_tabs() != "cohort":
+            return _empty_plot("Open the set tab to view this plot")
+
         res_df = stratification_results_df()
-        sel_id = patient_selected_id.get()
+        sel_id = _selected_entity_id()
         threshold = float(prob_threshold.get()) if prob_threshold.get() is not None else 0
         lbls = current_labels()
 
         if res_df is None or res_df.empty:
-            return _empty_plot("No cohort scores available")
+            return _empty_plot(lbls["text"].get("no_set_scores", f"No {lbls['set_lower']} scores available"))
 
         prob_col = lbls["probability_column"]
         class_col = lbls["class_column"]
@@ -988,13 +1181,13 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         ax.bar(np.arange(len(sorted_df)), sorted_df[prob_col], color=colors, alpha=0.82, width=0.85)
         ax.axhline(threshold, color="#1f2d3d", linestyle="--", linewidth=1.5, label=f"Threshold {threshold:.3f}")
 
-        if sel_id is not None and sel_id in sorted_df["ID"].values:
-            selected_idx = int(sorted_df.index[sorted_df["ID"] == sel_id][0])
+        if sel_id is not None and sel_id in sorted_df["ID"].astype(int).values:
+            selected_idx = int(sorted_df.index[sorted_df["ID"].astype(int) == sel_id][0])
             selected_score = float(sorted_df.loc[selected_idx, prob_col])
-            ax.scatter(selected_idx, selected_score, color="#ffc107", edgecolor="#1f2d3d", s=110, zorder=5, label=f"Patient {int(sel_id)}")
+            ax.scatter(selected_idx, selected_score, color="#ffc107", edgecolor="#1f2d3d", s=110, zorder=5, label=f"{lbls['singular_title']} {int(sel_id)}")
 
-        ax.set_title("Cohort stratification scores", fontweight="bold")
-        ax.set_xlabel("Patients ordered by score")
+        ax.set_title(lbls["text"].get("set_scores_plot_title", "Cohort stratification scores"), fontweight="bold")
+        ax.set_xlabel(lbls["text"].get("set_scores_plot_xlabel", f"{lbls['plural_title']} ordered by score"))
         ax.set_ylabel(prob_col)
         ax.set_ylim(0, max(1.0, float(sorted_df[prob_col].max()) * 1.08))
         ax.grid(axis="y", alpha=0.25)
@@ -1002,11 +1195,15 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         fig.tight_layout()
         return fig
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.plot
     def global_feature_importance_plot():
+        if input.stratification_tabs() != "model":
+            return _empty_plot("Open the model tab to view this plot")
+
         md = model_data.get()
         delta_test = delta_test_reactive.get()
+        lbls = current_labels()
 
         if md is None:
             return _empty_plot("No model data available")
@@ -1041,7 +1238,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     y_pos,
                     color="#fd7e14",
                     s=42,
-                    label="Current cohort",
+                    label=lbls["text"].get("current_set_label", "Current cohort"),
                     zorder=4,
                 )
 
@@ -1055,32 +1252,26 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         fig.tight_layout()
         return fig
 
-    @output
-    @render.data_frame
+    @output(suspend_when_hidden=False)
+    @render.ui
     def closest_reference_patients_table():
         closest_df = closest_reference_patients_df()
         if closest_df is None or closest_df.empty:
-            return render.DataGrid(
-                pd.DataFrame({"Message": ["Reference comparison requires a selected patient and an available reference cohort."]}),
-                width="100%",
-                selection_mode="none",
-            )
+            return None
 
-        return render.DataGrid(
-            closest_df,
-            width="100%",
-            filters=False,
-            selection_mode="none",
+        return ui.tags.div(
+            ui.HTML(closest_df.to_html(index=False, classes="reference-candidates-table", border=0)),
+            class_="reference-candidates-table-wrap",
         )
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.ui
     def closest_reference_patients_narrative():
         closest_df = closest_reference_patients_df()
         lbls = current_labels()
 
         if closest_df is None or closest_df.empty:
-            return ui.div("Reference comparison requires a selected patient and an available reference cohort.", class_="closest-patients-narrative")
+            return ui.div(lbls["text"].get("reference_comparison_empty", f"Reference comparison requires a selected {lbls['singular']} and an available reference {lbls['set_lower']}."), class_="closest-patients-narrative")
 
         class_col = lbls["class_column"]
         if class_col not in closest_df.columns:
@@ -1095,8 +1286,27 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
         score_text = f" Their mean stratification score is {mean_score:.3f}." if mean_score is not None else ""
         return ui.div(
-            f"The selected patient is most similar to reference patients mostly assigned to {top_group} ({top_count}/{total}).{score_text}",
-            class_="closest-patients-narrative",
+            ui.div(
+                lbls["text"].get(
+                    "closest_reference_narrative",
+                    f"The selected {lbls['singular']} is most similar to {lbls['reference_plural']} mostly assigned to {top_group} ({top_count}/{total}).{score_text}",
+                ).format(
+                    entity=lbls["singular"],
+                    reference_plural=lbls["reference_plural"],
+                    top_group=top_group,
+                    top_count=top_count,
+                    total=total,
+                    score_text=score_text,
+                ),
+                class_="closest-patients-narrative",
+            ),
+            ui.div(
+                lbls["text"].get(
+                    "closest_reference_privacy_note",
+                    "Reference records come from the model reference population, not from the current input set. If the reference population contains private or sensitive records, expose only anonymized summaries or distances rather than row-level reference data.",
+                ),
+                class_="reference-privacy-note",
+            ),
         )
 
     @render.download(filename="stratification_results.csv")
@@ -1120,26 +1330,29 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             report_zip.writestr("README.txt", _report_readme_text())
             report_zip.writestr("metadata.csv", _metadata_export_df().to_csv(index=False))
             report_zip.writestr("stratification_results.csv", _attach_export_metadata(res_df).to_csv(index=False))
-            report_zip.writestr("closest_reference_patients.csv", _attach_export_metadata(closest_df).to_csv(index=False))
-            report_zip.writestr("cohort_stratification_summary.csv", _cohort_summary_export_df().to_csv(index=False))
+            report_zip.writestr(_closest_reference_filename(), _attach_export_metadata(closest_df).to_csv(index=False))
+            report_zip.writestr(_set_summary_filename(), _cohort_summary_export_df().to_csv(index=False))
 
         buffer.seek(0)
         yield buffer.getvalue()
 
-    @render.download(filename="closest_reference_patients.csv")
+    @render.download(filename=_closest_reference_filename)
     def download_closest_patients():
         closest_df = closest_reference_patients_df()
         if closest_df is None:
             closest_df = pd.DataFrame()
         yield _attach_export_metadata(closest_df).to_csv(index=False)
 
-    @render.download(filename="cohort_stratification_summary.csv")
+    @render.download(filename=_set_summary_filename)
     def download_cohort_summary():
         yield _cohort_summary_export_df().to_csv(index=False)
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.plot
     def radar_plot():
+        if input.stratification_tabs() != "patient" or input.view_mode() != "radar":
+            return _empty_plot("Open profile comparison to view this plot")
+
         data = get_patient_data_context()
         if not data: return _empty_plot("Radar data unavailable")
         
@@ -1152,13 +1365,20 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         fig_radar, _ = _run_patient_analysis(data, feats, opts)
         return fig_radar if fig_radar else _empty_plot("Radar data unavailable")
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.plot
     def curve_plot():
+        if input.stratification_tabs() != "patient" or input.view_mode() != "curve":
+            return _empty_plot("Open feature curves to view this plot")
+
         data = get_patient_data_context()
         if not data: return _empty_plot("Curve data unavailable")
         
+        cfg = current_config()
         feats = list(input.features_to_plot() or [])
+        max_curve_features = int(cfg.get("max_curve_features", 8))
+        if len(feats) > max_curve_features:
+            feats = feats[:max_curve_features]
 
         if len(feats) < 3:
             return _empty_plot("Please, select at least 3 features to view")
@@ -1172,10 +1392,10 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         ax.set_axis_off()
         return fig
 
-    @output
+    @output(suspend_when_hidden=False)
     @render.data_frame
     def results_table_output():
-        sel_id = patient_selected_id.get()
+        sel_id = _selected_entity_id()
         res_df = stratification_results_df()
 
         # Fetch current labels reactively
@@ -1187,7 +1407,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
 
         if res_df is None or res_df.empty:
             return render.DataGrid(
-                pd.DataFrame({"Message": ["Add or upload patients to generate stratification results."]}),
+                pd.DataFrame({"Message": [lbls["text"].get("empty_results_message", f"Add or upload {lbls['plural']} to generate stratification results.")]}),
                 width="100%"
             )
 
@@ -1198,13 +1418,13 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         res_df[prob_col] = res_df[prob_col].round(3)
 
         table_styles = None
-        if sel_id:
-            if (res_df[res_df['ID'] == sel_id].empty):
+        if sel_id is not None:
+            if (res_df[res_df['ID'].astype(int) == sel_id].empty):
                 return render.DataGrid(
                     pd.DataFrame({"Message": ["Selected ID not found."]}),
                     width="100%"
                 )
-            sel_id_row = int(res_df[res_df['ID'] == sel_id].index[0])
+            sel_id_row = int(res_df[res_df['ID'].astype(int) == sel_id].index[0])
             pos_rows = res_df[res_df[class_col] == pos_class_label].index.to_list()
             neg_rows = res_df[res_df[class_col] == neg_class_label].index.to_list()
             table_styles = [

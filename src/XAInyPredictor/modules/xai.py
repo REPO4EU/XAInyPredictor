@@ -13,6 +13,7 @@ from sklearn.model_selection import train_test_split
 import sympy  # See https://github.com/knottwill/CoxKAN/blob/main/reprod/results.ipynb
 
 logger = logging.getLogger(__name__)
+_DELTA_XAI_FN_CACHE = {}
 
 
 def split_data_with_known_target(input_df, target='class_target', test_split=0.2):
@@ -39,7 +40,7 @@ def split_data_with_known_target(input_df, target='class_target', test_split=0.2
     return x_train, x_test, y_train, y_test
 
 
-def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str):
+def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str, simplify_formula: bool = True):
     """
     Reads the XAI output pickle file formula.pkl, which contains the formula of
     the XAI model, and simplifies it using the package sympy. Reads the file
@@ -62,7 +63,9 @@ def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str
     logger.debug("Logit 1 formula: %s", formula[1])
 
     # Simplify formula
-    delta_formula = sympy.simplify(formula[1] - formula[0])
+    delta_formula = formula[1] - formula[0]
+    if simplify_formula:
+        delta_formula = sympy.simplify(delta_formula)
     logger.debug("Delta formula simplified: %s", delta_formula)
 
     # Read best formula file and extract variables
@@ -104,23 +107,29 @@ def delta_xai(d_form, x_in: pd.DataFrame, feature_order: list | None = None):
         x_in = x_in[feature_order]
 
     x_d = x_in.to_numpy()
+    n_features = x_d.shape[1]
     delta = np.zeros(
-        (x_d.shape[0], x_d.shape[1] + 1))  # One input per covariate, one extra output for the constant term
-    for i in range(x_d.shape[0]):
-        for j in range(x_d.shape[1]):
-            func = d_form.copy()
-            for k in range(x_d.shape[1]):
-                if k == j:
-                    func = func.subs(f'x_{k + 1}', x_d[i, j])
-                else:
-                    func = func.subs(f'x_{k + 1}', 0)
-            delta[i, j] = float(func)
-        # Get the constant term
-        func = d_form.copy()
-        for k in range(x_d.shape[1]):
-            func = func.subs(f'x_{k + 1}', 0)
-        delta[i, -1] = float(func)
-        delta[i, :-1] -= delta[i, -1]  # Subtract the constant term from all the other terms (only account for it once)
+        (x_d.shape[0], n_features + 1))  # One input per covariate, one extra output for the constant term
+
+    cache_key = (str(d_form), tuple(x_in.columns))
+    if cache_key not in _DELTA_XAI_FN_CACHE:
+        symbols = [sympy.Symbol(f"x_{idx + 1}") for idx in range(n_features)]
+        zero_subs = {symbol: 0 for symbol in symbols}
+        const = float(d_form.subs(zero_subs))
+        partial_fns = []
+        for symbol in symbols:
+            partial_subs = {other_symbol: 0 for other_symbol in symbols if other_symbol != symbol}
+            partial_expr = d_form.subs(partial_subs)
+            partial_fns.append(sympy.lambdify(symbol, partial_expr, "numpy"))
+        _DELTA_XAI_FN_CACHE[cache_key] = const, partial_fns
+
+    const, partial_fns = _DELTA_XAI_FN_CACHE[cache_key]
+    for j, partial_fn in enumerate(partial_fns):
+        values = partial_fn(x_d[:, j])
+        delta[:, j] = np.asarray(values, dtype=float)
+
+    delta[:, -1] = const
+    delta[:, :-1] -= const  # Subtract the constant term from all the other terms (only account for it once)
     delta = pd.DataFrame(delta, index=x_in.index, columns=x_in.columns.tolist() + ['const'])
     delta["pred_prob"] = 1. / (1 + np.exp(-delta.values.sum(axis=1)))
     return delta
@@ -189,6 +198,7 @@ def analyze_patient(
         show_average_class1_radial=True,
         neg_class_label="Negative",
         pos_class_label="Positive",
+        entity_label="Patient",
     ):
 
     logger.debug("Analyzing patient %s", patient_id)
@@ -240,9 +250,9 @@ def analyze_patient(
         # avg_proba = 1 / (1 + np.exp(-delta_train_values_noconst.mean(axis=0)))
         # avg_proba_class0 = 1 / (1 + np.exp(-delta_train_class0_values_noconst.mean(axis=0)))
         # avg_proba_class1 = 1 / (1 + np.exp(-delta_train_class1_values_noconst.mean(axis=0)))
-        title = f"Patient {patient_id} (prob = {pred_proba_patient:.2f}, mean = {avg_proba[0]:.2f})"
-        fig_radar, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(projection='radar'))
-        # fig.subplots_adjust(top=0.85, bottom=0.05)
+        title = f"{entity_label} {patient_id} (prob = {pred_proba_patient:.2f}, mean = {avg_proba[0]:.2f})"
+        fig_radar, ax = plt.subplots(figsize=(7.8, 5.8), subplot_kw=dict(projection='radar'))
+        fig_radar.subplots_adjust(left=0.32, right=0.96, top=0.86, bottom=0.08)
         ax.set_rgrids([0.2, 0.4, 0.6, 0.8])
         ax.set_title(title, position=(0.5, 1.1), ha='center', weight='bold')
         ax.set_yticklabels([]) # Remove radial axis numbers
@@ -281,7 +291,7 @@ def analyze_patient(
         ax.fill(theta, pat_proba[feature_idx], alpha=0.1, color='r')
 
         ax.set_varlabels([label.replace("_", " ") for label in feature_names])
-        plt.legend(loc='best', ncol=2, bbox_to_anchor=(0.8, -0.1))  # Note: this can be uncommented, but may clutter the plot
+        ax.legend(loc='center left', ncol=1, bbox_to_anchor=(-0.55, 0.5), frameon=True)
 
     # Curves plot: show only the ones that do matter!!
     # Revert again the order to have the right plot order
