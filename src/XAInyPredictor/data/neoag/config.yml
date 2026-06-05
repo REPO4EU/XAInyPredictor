@@ -1,0 +1,243 @@
+name: "Neoantigen Candidate Prioritizer"
+description: "Prioritize peptide-HLA neoantigen candidates by predicted immunogenicity"
+use_case_type: "neoantigen"
+false_negative_rate: 0.10
+max_reference_candidates: 40
+default_selected_features: 5
+max_curve_features: 6
+target_column: "Qualitative_Measure"
+positive_class: 1
+negative_class: 0
+
+model_metadata:
+  model_version: "KAN symbolic prototype"
+  training_date: "Neoantigen dataset snapshot"
+  cohort_source: "Reference peptide-HLA candidate dataset from the neoantigen model development workflow"
+  intended_use: "Interpretable stratification support for neoantigen candidate prioritization and exploratory translational research"
+  validation_status: "Clinical utility and workflow fit should be validated with immunology and oncology collaborators"
+  limitations: "Candidate-level prototype; patient-level stratification requires patient identifiers, patient-specific candidate sets, and clinical validation."
+
+features:
+  - name: "Peptide"
+    label: "Peptide sequence"
+    type: "text"
+    role: "identifier"
+    plot: false
+    default: "YMDGTMSQV"
+    description: "Mutated peptide sequence presented by the HLA molecule."
+
+  - name: "hla"
+    label: "HLA allele"
+    type: "text"
+    default: "HLA-B35:01"
+    description: "Presenting HLA allele."
+
+  - name: "pseudosequence"
+    label: "HLA pseudosequence"
+    type: "text"
+    default: "YYATYRNIFTNTYESNLYIRYDSYTWAVLAYLWY"
+    description: "HLA binding-groove pseudosequence."
+
+  - name: "Molecular_weight"
+    label: "Molecular weight"
+    type: "numeric"
+    min: 500
+    max: 2500
+    default: 1065.28
+    step: 0.01
+
+  - name: "GRAVY"
+    label: "GRAVY"
+    type: "numeric"
+    min: -5
+    max: 5
+    default: 0.29
+    step: 0.01
+
+  - name: "instability"
+    label: "Instability index"
+    type: "numeric"
+    min: 0
+    max: 200
+    default: 55.97
+    step: 0.01
+
+  - name: "mhcflurry_affinity_percentile"
+    label: "MHCflurry affinity percentile"
+    type: "numeric"
+    min: 0
+    max: 100
+    default: 0.036
+    step: 0.001
+
+  - name: "pI"
+    label: "Isoelectric point"
+    type: "numeric"
+    min: 0
+    max: 14
+    default: 5.84
+    step: 0.01
+
+  - name: "mhcflurry_processing_score"
+    label: "MHCflurry processing score"
+    type: "numeric"
+    min: 0
+    max: 1
+    default: 0.758
+    step: 0.001
+
+  - name: "mhcflurry_presentation_score"
+    label: "MHCflurry presentation score"
+    type: "numeric"
+    min: 0
+    max: 1
+    default: 0.974
+    step: 0.001
+
+  - name: "Half_life"
+    label: "Half-life"
+    type: "numeric"
+    min: 0
+    max: 100
+    default: 5.5
+    step: 0.1
+
+  - name: "charge"
+    label: "Charge"
+    type: "numeric"
+    min: -5
+    max: 5
+    default: 0
+    step: 1
+
+  - name: "score"
+    label: "Expression score"
+    type: "numeric"
+    min: -5
+    max: 5
+    default: -0.0026
+    step: 0.0001
+
+  - name: "hydro_P2"
+    label: "Hydrophobicity P2"
+    type: "numeric"
+    min: -5
+    max: 5
+    default: 2.8
+    step: 0.1
+
+  - name: "hydro_P9"
+    label: "Hydrophobicity P9"
+    type: "numeric"
+    min: -5
+    max: 5
+    default: 1.9
+    step: 0.1
+
+encoding: {}
+
+labels:
+  data_source: "Data Source"
+  select_method: "Select Method:"
+  manual_entry: "Manual Entry"
+  upload_file: "Upload File"
+  example_cohort: "Example Candidate Set"
+  positive_class_label: "Immunogenic"
+  negative_class_label: "Non-immunogenic"
+  probability_column: "Immunogenicity Score"
+  class_column: "Candidate Class"
+
+  entity:
+    singular: "candidate"
+    plural: "candidates"
+    singular_title: "Candidate"
+    plural_title: "Candidates"
+    set_lower: "candidate set"
+    set_title: "Candidate Set"
+    reference_plural: "reference candidates"
+    reference_title: "Reference Candidates"
+
+  form:
+    add_patient_button: "Add Candidate to Set"
+    delete_selected_button: "Delete Selected"
+    reset_cohort_button: "Reset Candidate Set"
+    cohort_title: "Current Candidate Set"
+    no_data_message: "No candidates uploaded."
+    manual_source: "manual candidate set"
+    uploaded_source: "uploaded file"
+    example_source: "example candidate set"
+    added_message: "Candidate added."
+    deleted_message: "Deleted {count} candidate(s)."
+    reset_message: "Candidate set reset."
+
+  text:
+    analysis_title: "Neoantigen Stratification Support"
+    selected_output_title: "Selected Candidate Stratification"
+    groups_label: "Candidate classes"
+    select_entity_label: "Select candidate:"
+    search_entity_placeholder: "Search by candidate ID..."
+    profile_comparison_title: "Candidate Profile Comparison "
+    set_summary_title: "Candidate Set Summary"
+    set_distribution_title: "Candidate Score Distribution "
+    set_distribution_help: "Candidates are ordered by immunogenicity score. The dashed line marks the current decision threshold and the selected candidate is highlighted."
+    closest_reference_title: "Closest Reference Candidates "
+    closest_reference_help_title: "Closest reference candidates:"
+    closest_reference_help: "Reference candidates are ranked by distance in the model contribution space. Row-level reference features are not exposed."
+    results_table_help: "The table shows model-based neoantigen candidate prioritization:"
+    score_help: " Indicates the score used to assign the candidate class."
+    class_help: " Assigns the candidate to Immunogenic or Non-immunogenic."
+    empty_results_message: "Add or upload candidates to generate stratification support outputs."
+    empty_individual_summary: "Add or upload candidates to review individual candidate outputs."
+    selected_entity_not_found: "Selected candidate not found."
+    empty_set_summary: "Add or upload candidates to summarize the candidate set."
+    reference_set_label: "Reference candidates"
+    reference_source_label: "Reference candidate source"
+    reference_source_missing: "Reference candidate source not specified."
+    no_set_scores: "No candidate scores available"
+    set_scores_plot_title: "Candidate immunogenicity scores"
+    set_scores_plot_xlabel: "Candidates ordered by score"
+    current_set_label: "Current candidate set"
+    reference_comparison_empty: "Reference comparison requires a selected candidate and available reference candidates."
+    closest_reference_narrative: "The selected {entity} is most similar to {reference_plural} mostly assigned to {top_group} ({top_count}/{total}).{score_text}"
+    closest_reference_privacy_note: "Reference candidates come from the model reference population, not from the current candidate set. The table reports anonymized neighbor ranks, distances, scores, and classes without exposing row-level reference features."
+    stratification_interpretation: "This {entity} is assigned to {group} because the immunogenicity score ({score}) is {direction} the decision threshold ({threshold})."
+    stratification_disclaimer: "Research prototype output: this candidate-level assessment supports translational stratification research and should be interpreted with immunology and oncology collaborators during utility validation."
+    report_context: "This package supports neoantigen candidate prioritization research. Clinical utility and interpretation should be validated with domain collaborators."
+    context_selection_hint: "Select a candidate to highlight its value in the distribution."
+    context_card_title: "Candidate Feature Context"
+    context_card_tooltip: "Blue bars: Reference candidate distribution. Red dashed line: Selected candidate value."
+    info_context: "This use case supports neoantigen candidate prioritization by assigning peptide-HLA candidates to immunogenicity classes and contextualizing their model evidence. Patient-level stratification would require aggregation across patient-specific candidate sets."
+    info_step_input_title: "Input Candidate Data"
+    info_step_input_suffix: " tab. You can upload a file or manually enter candidate details."
+    info_step_context_suffix: " tab, compare candidate features against the reference candidate population."
+    info_step_output_middle: " to see the Immunogenicity Score and assigned candidate class. "
+    info_step_output_suffix: "Use the charts to understand the candidate's profile against reference candidates."
+
+titles:
+  app_title: "XAInyPredictor"
+  app_subtitle: "Interpretable Stratification Support"
+  tab_data_input: "1. Data Input"
+  tab_data_exploration: "2. Candidate Context"
+  tab_prediction: "3. Stratification Support"
+  data_source: "Data Source"
+  select_method: "Select Method:"
+  manual_entry: "Manual Entry"
+  upload_file: "Upload File"
+  example_cohort: "Example Candidate Set"
+  feature_analysis: "Candidate Profile Comparison"
+  feature_analysis_short: "Profile Comparison"
+  distance_analysis: "Feature Context Curves"
+  distance_analysis_short: "Feature Curves"
+  prediction_results: "Candidate Stratification Results"
+
+help_texts:
+  fnr_threshold: "This setting controls how many immunogenic candidates the model is allowed to miss when assigning candidate classes."
+  fnr_zero: "Classify candidates as Immunogenic whenever needed to avoid missing true immunogenic candidates."
+  fnr_higher: "Accept missing some immunogenic candidates to focus on higher-confidence candidate prioritization."
+  feature_analysis: "Compare selected candidate features against the reference candidate distribution."
+  distance_analysis: "Inspect how feature values relate to the model score and candidate class across reference candidates."
+  prediction_results: "Model-based candidate prioritization results for the current candidate set."
+  profile_comparison: "Compare the selected candidate profile with similar reference candidates and class-level averages."
+  feature_importance: "Global feature contribution summary derived from the symbolic model outputs."
+  cohort_score_distribution: "Distribution of model scores in the current candidate set."
+  closest_patients: "Reference candidates closest to the selected candidate in model contribution space."
