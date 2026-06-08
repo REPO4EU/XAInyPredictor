@@ -46,6 +46,47 @@ def _package_resource_dir(*parts: str) -> Path:
 WWW_DIR = _package_resource_dir("shinyapp", "www")
 
 _USE_CASE_CACHE = {}
+_ACTIVE_SESSION_COUNT = 0
+_SESSION_SHUTDOWN_LOCK = threading.Lock()
+_SESSION_SHUTDOWN_TIMER = None
+
+
+def _exit_on_last_session_end_enabled() -> bool:
+    return os.environ.get("XAINYPREDICTOR_EXIT_ON_LAST_SESSION_END") == "1"
+
+
+def _shutdown_process_if_idle() -> None:
+    with _SESSION_SHUTDOWN_LOCK:
+        if _ACTIVE_SESSION_COUNT > 0:
+            return
+    os._exit(0)
+
+
+def _register_session_lifecycle(session: Session) -> None:
+    if not _exit_on_last_session_end_enabled():
+        return
+
+    global _ACTIVE_SESSION_COUNT, _SESSION_SHUTDOWN_TIMER
+
+    with _SESSION_SHUTDOWN_LOCK:
+        _ACTIVE_SESSION_COUNT += 1
+        if _SESSION_SHUTDOWN_TIMER is not None:
+            _SESSION_SHUTDOWN_TIMER.cancel()
+            _SESSION_SHUTDOWN_TIMER = None
+
+    def _on_session_ended() -> None:
+        global _ACTIVE_SESSION_COUNT, _SESSION_SHUTDOWN_TIMER
+
+        with _SESSION_SHUTDOWN_LOCK:
+            _ACTIVE_SESSION_COUNT = max(0, _ACTIVE_SESSION_COUNT - 1)
+            if _ACTIVE_SESSION_COUNT > 0:
+                return
+
+            _SESSION_SHUTDOWN_TIMER = threading.Timer(3.0, _shutdown_process_if_idle)
+            _SESSION_SHUTDOWN_TIMER.daemon = True
+            _SESSION_SHUTDOWN_TIMER.start()
+
+    session.on_ended(_on_session_ended)
 
 def _get_use_cases() -> dict:
     return discover_use_cases()
@@ -431,6 +472,8 @@ app_ui = build_ui(DEFAULT_CONFIG, DEFAULT_USE_CASE)
 
 
 def server(input, output, session: Session):
+    _register_session_lifecycle(session)
+
     current_use_case = reactive.Value(DEFAULT_USE_CASE)
     model_data = reactive.Value(MODEL_DATA)
     config = reactive.Value(DEFAULT_CONFIG)
@@ -795,6 +838,7 @@ def ensure_stdio_streams():
 
 
 if __name__ == "__main__":
+    os.environ["XAINYPREDICTOR_EXIT_ON_LAST_SESSION_END"] = "1"
     ensure_stdio_streams()
     threading.Thread(target=open_browser, daemon=True).start()
     app.run(host="127.0.0.1", port=PORT, log_level="critical")

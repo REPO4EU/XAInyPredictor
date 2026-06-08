@@ -302,8 +302,10 @@ def analyze_patient(
     if n_feats > 0: # There is something to show
         dtrain_df = pd.DataFrame(delta_train_values, columns=feature_names+['const'])
         fig_curve, axs = plt.subplots(n_feats + 1, 1, figsize=(6, 2 * (n_feats + 1)))
-        train_logits = delta_train_values.sum(axis=1)
-        patient_logit = float(delta_patient.values.sum())
+        clipped_train_prob = np.clip(delta_train["pred_prob"].to_numpy(dtype=float), 1e-9, 1 - 1e-9)
+        train_logits = np.log(clipped_train_prob / (1 - clipped_train_prob))
+        clipped_patient_prob = np.clip(pred_proba_patient, 1e-9, 1 - 1e-9)
+        patient_logit = float(np.log(clipped_patient_prob / (1 - clipped_patient_prob)))
         x_min = min(float(train_logits.min()), patient_logit)
         x_max = max(float(train_logits.max()), patient_logit)
         padding = max((x_max - x_min) * 0.08, 0.1)
