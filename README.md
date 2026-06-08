@@ -120,6 +120,8 @@ Use cases may also include additional files such as `reference_data.csv`.
 - tab titles, help text, validation copy, and download labels;
 - model-specific options such as false-negative-rate defaults and reference-set limits.
 
+When a new use case folder is added under `src/XAInyPredictor/data/`, restart or refresh the app to make it available in the startup modal and navigation selector. The GitHub Actions build packages the full `data/` directory, so committed use cases are included in generated desktop artifacts.
+
 ## Development
 
 Install development dependencies:
@@ -145,6 +147,24 @@ Generate docs:
 ```powershell
 doxygen .\docs\Doxyfile
 ```
+
+## GitHub Actions Build
+
+The repository includes a **Build XAInyPredictor** workflow in `.github/workflows/build.yml`.
+
+It runs on every push and can also be started manually from GitHub:
+
+1. Open the repository on GitHub.
+2. Go to **Actions**.
+3. Select **Build XAInyPredictor**.
+4. Click **Run workflow**.
+5. When the run finishes, download the generated artifacts from the workflow run summary.
+
+The workflow builds:
+
+- a Windows installer;
+- a Linux tarball;
+- a macOS zip package.
 
 ## Testing Status
 
