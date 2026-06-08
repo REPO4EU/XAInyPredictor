@@ -234,11 +234,17 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         current_cfg = config_reactive.get() if config_reactive else (config_init or {})
         labels = current_cfg.get("labels", {})
         entity = labels.get("entity", {})
+        positive_color = labels.get("positive_class_color", "#dc3545")
+        negative_color = labels.get("negative_class_color", "#198754")
         return {
             "positive_class": current_cfg.get("positive_class", "YES"),
             "negative_class": current_cfg.get("negative_class", "NO"),
             "positive_class_label": labels.get("positive_class_label", "Positive"),
             "negative_class_label": labels.get("negative_class_label", "Negative"),
+            "positive_class_color": positive_color,
+            "negative_class_color": negative_color,
+            "positive_class_bg": labels.get("positive_class_bg", f"{positive_color}22"),
+            "negative_class_bg": labels.get("negative_class_bg", f"{negative_color}22"),
             "probability_column": labels.get("probability_column", "Stratification Score"),
             "class_column": labels.get("class_column", "Patient Group"),
             "singular": entity.get("singular", "patient"),
@@ -918,7 +924,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             score = float(patient_row[prob_col].iloc[0])
             threshold = float(prob_thr) if prob_thr is not None else 0
             group = str(patient_row[class_col].iloc[0])
-            group_class = "stratification-positive" if group == lbls["positive_class_label"] else "stratification-negative"
+            group_color = lbls["positive_class_color"] if group == lbls["positive_class_label"] else lbls["negative_class_color"]
 
             return ui.div(
                 ui.div(
@@ -938,7 +944,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                 ),
                 ui.div(
                     ui.div(class_col, class_="stratification-summary-label"),
-                    ui.div(group, class_=f"stratification-summary-value {group_class}"),
+                    ui.div(group, class_="stratification-summary-value", style=f"color: {group_color};"),
                     class_="stratification-summary-item",
                 ),
                 class_="stratification-summary",
@@ -992,11 +998,13 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                         ui.tags.b(f"Below threshold: "),
                         f"assigned to {negative_label}.",
                         class_="stratification-rule stratification-rule-negative",
+                        style=f"background: {lbls['negative_class_bg']}; color: {lbls['negative_class_color']};",
                     ),
                     ui.div(
                         ui.tags.b(f"At or above threshold: "),
                         f"assigned to {positive_label}.",
                         class_="stratification-rule stratification-rule-positive",
+                        style=f"background: {lbls['positive_class_bg']}; color: {lbls['positive_class_color']};",
                     ),
                     class_="stratification-rules",
                 ),
@@ -1046,12 +1054,12 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
             ),
             ui.div(
                 ui.div(negative_label, class_="stratification-summary-label"),
-                ui.div(str(negative_count), class_="stratification-summary-value stratification-negative"),
+                ui.div(str(negative_count), class_="stratification-summary-value", style=f"color: {lbls['negative_class_color']};"),
                 class_="stratification-summary-item",
             ),
             ui.div(
                 ui.div(positive_label, class_="stratification-summary-label"),
-                ui.div(f"{positive_count} ({positive_pct:.0f}%)", class_="stratification-summary-value stratification-positive"),
+                ui.div(f"{positive_count} ({positive_pct:.0f}%)", class_="stratification-summary-value", style=f"color: {lbls['positive_class_color']};"),
                 class_="stratification-summary-item",
             ),
             class_="stratification-summary",
@@ -1173,8 +1181,8 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
         sorted_df = res_df.sort_values(prob_col, ascending=False).reset_index(drop=True)
         colors = np.where(
             sorted_df[class_col] == lbls["positive_class_label"],
-            "#dc3545",
-            "#198754",
+            lbls["positive_class_color"],
+            lbls["negative_class_color"],
         )
 
         fig, ax = plt.subplots(figsize=(9, 4))
@@ -1440,7 +1448,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     "rows": pos_rows,
                     "cols": list(range(len(res_df.columns))),
                     "style": {
-                        "color": "#dc3545",
+                        "color": lbls["positive_class_color"],
                         "font-weight": "bold",
                     },
                 },
@@ -1448,7 +1456,7 @@ def server(input: Inputs, output: Outputs, session: Session, global_input_data, 
                     "rows": neg_rows,
                     "cols": list(range(len(res_df.columns))),
                     "style": {
-                        "color": "#198754",
+                        "color": lbls["negative_class_color"],
                         "font-weight": "bold",
                     },
                 }

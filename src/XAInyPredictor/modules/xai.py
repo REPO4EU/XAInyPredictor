@@ -302,10 +302,15 @@ def analyze_patient(
     if n_feats > 0: # There is something to show
         dtrain_df = pd.DataFrame(delta_train_values, columns=feature_names+['const'])
         fig_curve, axs = plt.subplots(n_feats + 1, 1, figsize=(6, 2 * (n_feats + 1)))
-        x_vals = np.arange(delta_train_values.sum(axis=1).min(), delta_train_values.sum(axis=1).max(), 0.01)
+        train_logits = delta_train_values.sum(axis=1)
+        patient_logit = float(delta_patient.values.sum())
+        x_min = min(float(train_logits.min()), patient_logit)
+        x_max = max(float(train_logits.max()), patient_logit)
+        padding = max((x_max - x_min) * 0.08, 0.1)
+        x_vals = np.linspace(x_min - padding, x_max + padding, 300)
         theor_proba = 1 / (1 + np.exp(-x_vals))
         axs[0].plot(x_vals, theor_proba, 'b', alpha=0.2)
-        axs[0].scatter(delta_patient.values.sum(), pred_proba_patient, color='r')
+        axs[0].scatter(patient_logit, pred_proba_patient, color='r')
         axs[0].set_xlabel('Logit')
         axs[0].set_ylabel('Probability')
         axs[0].set_title(f'Patient results')
@@ -313,16 +318,35 @@ def analyze_patient(
         for idj, feat_name in enumerate(cols_vars):
             if idj < n_feats: # Only plot the first n_feats features
                 j = idj + 1  # The first plot is already used for the theoretical curve
-                # Keep only unique values of x_test[feat_name]
-                idxs = np.unique(x_train[feat_name].values, return_index=True)[1]
-                axs[j].plot(x_train[feat_name].values[idxs], dtrain_df[feat_name].values[idxs], color='b')
-                axs[j].scatter(x_train[feat_name].values[idxs], dtrain_df[feat_name].values[idxs],
-                                    color='b', alpha=0.1)
+                curve_df = pd.DataFrame(
+                    {
+                        "x": x_train[feat_name].values,
+                        "y": dtrain_df[feat_name].values,
+                    }
+                ).dropna().sort_values("x")
+                curve_df = curve_df.drop_duplicates("x", keep="first")
+                if len(curve_df) > 1:
+                    axs[j].plot(curve_df["x"].values, curve_df["y"].values, color='b')
+                axs[j].scatter(curve_df["x"].values, curve_df["y"].values, color='b', alpha=0.1)
                 for jj in range(n_dists):
                     axs[j].scatter(x_train.iloc[idx_closest[jj]][feat_name], dtrain_df.iloc[idx_closest[jj]][feat_name],
                                         color='lightsalmon', alpha=1)
 
-                axs[j].scatter(patient_info[feat_name], delta_patient[feat_name], color='r')
+                patient_x = float(patient_info[feat_name].iloc[0])
+                patient_y = float(delta_patient[feat_name].iloc[0])
+                axs[j].scatter(patient_x, patient_y, color='r')
+                x_axis_values = curve_df["x"].tolist() + [patient_x]
+                y_axis_values = curve_df["y"].tolist() + [patient_y]
+                if x_axis_values:
+                    x_axis_min = min(x_axis_values)
+                    x_axis_max = max(x_axis_values)
+                    x_padding = max((x_axis_max - x_axis_min) * 0.08, 0.05)
+                    axs[j].set_xlim(x_axis_min - x_padding, x_axis_max + x_padding)
+                if y_axis_values:
+                    y_axis_min = min(y_axis_values)
+                    y_axis_max = max(y_axis_values)
+                    y_padding = max((y_axis_max - y_axis_min) * 0.08, 0.05)
+                    axs[j].set_ylim(y_axis_min - y_padding, y_axis_max + y_padding)
                 axs[j].set_ylabel(f"logit {feat_name.replace('_', ' ')}")
 
         return fig_radar, fig_curve

@@ -17,9 +17,16 @@
   border-radius: 7px;
   margin: 0 2px;
   border: 1px solid transparent;
+  font-size: 0.88rem;
   font-weight: 600;
-  padding: 0 18px;
+  line-height: 1.15;
+  max-width: 190px;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0 12px;
+  text-overflow: ellipsis;
   transition: all 0.2s ease;
+  white-space: normal;
 }
 
 .navbar-button.active-tab {
@@ -115,6 +122,7 @@
 #div-navbar-map {
   background-color: transparent;
   height: 44px;
+  min-width: 0;
   transition: 0.2s;
   float: left;
 }
@@ -126,6 +134,7 @@
 #div-navbar-plot {
   background-color: transparent;
   height: 44px;
+  min-width: 0;
   transition: 0.3s;
   float: left;
 }
@@ -144,6 +153,7 @@
   border-radius: 9px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   padding: 5px;
+  min-width: 0;
 }
 
 #div-navbar-tabs .form-group {
@@ -152,8 +162,8 @@
 
 #div-navbar-tabs select,
 #div-navbar-tabs .selectize-control {
-  min-width: 260px;
-  width: 260px;
+  min-width: 180px;
+  width: clamp(180px, 18vw, 260px);
 }
 
 #div-navbar-tabs .selectize-input {
@@ -263,8 +273,8 @@ body.startup-loading #use-case-loading-overlay {
 
 .apply-data-panel {
   align-items: center;
-  background: #eef7ff;
-  border: 1px solid #b9dcff;
+  background: #fff8e6;
+  border: 1px solid #f3d78b;
   border-radius: 7px;
   display: flex;
   gap: 14px;
@@ -290,11 +300,21 @@ body.startup-loading #use-case-loading-overlay {
 }
 
 .apply-data-panel .btn {
+  background: #806000;
+  border-color: #806000;
+  color: #ffffff;
   min-width: 220px;
 }
 
+.apply-data-panel .btn:hover,
+.apply-data-panel .btn:focus {
+  background: #6e5200;
+  border-color: #6e5200;
+  color: #ffffff;
+}
+
 .apply-data-hint {
-  color: #51677a;
+  color: #806000;
   font-size: 0.86rem;
   margin: 0;
 }

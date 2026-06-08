@@ -45,8 +45,15 @@ def _package_resource_dir(*parts: str) -> Path:
 
 WWW_DIR = _package_resource_dir("shinyapp", "www")
 
-USE_CASES = discover_use_cases()
 _USE_CASE_CACHE = {}
+
+def _get_use_cases() -> dict:
+    return discover_use_cases()
+
+
+def _use_case_choices() -> dict:
+    return {name: info["display_name"] for name, info in _get_use_cases().items()}
+
 
 def _load_model_data_cached(use_case: str):
     if use_case in _USE_CASE_CACHE:
@@ -57,7 +64,7 @@ def _load_model_data_cached(use_case: str):
 
 
 def build_startup_modal():
-    use_case_choices = {name: info["display_name"] for name, info in USE_CASES.items()}
+    use_case_choices = _use_case_choices()
     return ui.modal(
         ui.tags.div(
             ui.tags.h3("Select Use Case", style="color: #007bff; font-weight: bold; text-align: center;"),
@@ -68,7 +75,7 @@ def build_startup_modal():
                 id="startup_use_case",
                 label="Available Use Cases:",
                 choices=use_case_choices,
-                selected="rai",
+                selected=DEFAULT_USE_CASE if DEFAULT_USE_CASE in use_case_choices else None,
             ),
         ),
         title="Welcome to XAInyPredictor",
@@ -84,7 +91,7 @@ def build_startup_modal():
 
 
 def build_page_header(config: dict, current_use_case: str):
-    use_case_choices = {name: info["display_name"] for name, info in USE_CASES.items()}
+    use_case_choices = _use_case_choices()
 
     return ui.tags.div(
         ui.tags.div(
@@ -162,9 +169,9 @@ def build_page_header(config: dict, current_use_case: str):
 
 def build_ui(config: dict, current_use_case: str):
     page_dependencies = ui.tags.head(
-        ui.tags.link(rel="stylesheet", type="text/css", href="layout.css?v=20260604b"),
-        ui.tags.link(rel="stylesheet", type="text/css", href="style.css?v=20260604b"),
-        ui.tags.script(src="index.js?v=20260604b"),
+        ui.tags.link(rel="stylesheet", type="text/css", href="layout.css?v=20260608a"),
+        ui.tags.link(rel="stylesheet", type="text/css", href="style.css?v=20260608a"),
+        ui.tags.script(src="index.js?v=20260608a"),
         ui.tags.meta(name="description", content=config.get("description", "XAI Predictor")),
         ui.tags.meta(name="theme-color", content="#000000"),
         ui.tags.meta(name="viewport", content="width=device-width, initial-scale=1"),
@@ -440,6 +447,15 @@ def server(input, output, session: Session):
     def _show_startup_modal():
         ui.modal_show(build_startup_modal())
 
+    @reactive.Effect
+    def _refresh_use_case_selector():
+        choices = _use_case_choices()
+        ui.update_select(
+            "use_case_selector",
+            choices=choices,
+            selected=current_use_case.get() if current_use_case.get() in choices else None,
+        )
+
     startup_initialized = reactive.Value(False)
 
     @reactive.Effect
@@ -468,7 +484,7 @@ def server(input, output, session: Session):
             x_test_reactive.set(new_model_data["X_TEST"])
             prob_threshold.set(new_model_data["DEFAULT_THRESHOLD"])
 
-            ui.update_select("use_case_selector", selected=selected_use_case)
+            ui.update_select("use_case_selector", choices=_use_case_choices(), selected=selected_use_case)
 
             ui.modal_remove()
             await session.send_custom_message("setUseCaseLoading", {"visible": False})
@@ -480,6 +496,11 @@ def server(input, output, session: Session):
             return
         new_use_case = input.use_case_selector()
         if new_use_case and new_use_case != current_use_case.get():
+            choices = _use_case_choices()
+            if new_use_case not in choices:
+                ui.notification_show(f"Use case '{new_use_case}' is no longer available.", type="error")
+                ui.update_select("use_case_selector", choices=choices, selected=current_use_case.get())
+                return
             pending_use_case.set(new_use_case)
             ui.update_select("use_case_selector", selected=current_use_case.get())
             ui.modal_show(

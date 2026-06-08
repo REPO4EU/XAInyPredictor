@@ -232,6 +232,7 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     validation_errors = reactive.Value([])
     validation_success = reactive.Value(None)
     pending_data = reactive.Value(None)
+    last_valid_data = reactive.Value(None)
     pending_is_custom = reactive.Value(False)
     pending_signature = reactive.Value(None)
     confirmed_signature = reactive.Value(None)
@@ -300,6 +301,7 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
         validation_errors.set([])
         validation_success.set(None)
         pending_data.set(None)
+        last_valid_data.set(None)
         pending_is_custom.set(False)
         pending_signature.set(None)
         confirmed_signature.set(None)
@@ -312,12 +314,21 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
 
     def _ensure_id(df):
         if df is None: return None
+        df = df.copy().reset_index(drop=True)
         if 'ID' not in df.columns:
             df.insert(0, 'ID', range(1, len(df) + 1))
         else:
             cols = ['ID'] + [c for c in df.columns if c != 'ID']
             df = df[cols]
         return df
+
+    def _numeric_error_message(value, feature_name):
+        current_cfg = config_reactive.get() if config_reactive else config_init
+        for feature in current_cfg.get("features", []) if current_cfg else []:
+            if feature.get("name") == feature_name:
+                display_name = feature.get("display_name") or feature.get("label") or feature_name
+                return f"{display_name} must be numeric. Invalid value(s): {value}."
+        return f"{feature_name} must be numeric. Invalid value(s): {value}."
 
     def _data_signature(df, is_custom):
         if df is None or df.empty:
@@ -486,20 +497,38 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
         new_id = id_counter()
         current_labels = labels_dict.get()
         current_input_types = input_types.get()
+        current_cfg = config_reactive.get() if config_reactive else config_init
 
         row_data = {'ID': new_id}
         for input_id, feat_name in current_labels.items():
             val = getattr(input, input_id, None)()
             if val is not None:
                 if current_input_types.get(feat_name) == "numeric":
-                    row_data[feat_name] = float(_decimal_text(val))
+                    numeric_value = pd.to_numeric(_decimal_text(val), errors="coerce")
+                    if pd.isna(numeric_value):
+                        error = _numeric_error_message(val, feat_name)
+                        validation_errors.set([error])
+                        validation_success.set(None)
+                        ui.notification_show("Input validation failed. See details in Data Input.", type="error")
+                        return
+                    row_data[feat_name] = float(numeric_value)
                 elif isinstance(val, str):
                     row_data[feat_name] = val
                 else:
                     row_data[feat_name] = float(val)
 
         new_row = pd.DataFrame([row_data])
+        validation_df = pd.concat([current_df, new_row], ignore_index=True)
+        errors = _validate_input_data(validation_df, current_cfg)
+        if errors:
+            validation_errors.set(errors)
+            validation_success.set(None)
+            ui.notification_show("Input validation failed. See details in Data Input.", type="error")
+            return
+
         updated_df = pd.concat([current_df, new_row], ignore_index=True)
+        validation_errors.set([])
+        validation_success.set(None)
         form_df.set(updated_df)
         working_source.set("form")
         id_counter.set(new_id + 1)
@@ -513,11 +542,17 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
             ui.notification_show("No rows selected.", type="warning")
             return
 
-        current_df = form_df.get()
-        updated_df = current_df.drop(index=list(selected_rows)).reset_index(drop=True)
+        current_df = _ensure_id(form_df.get())
+        selected_positions = sorted({int(row) for row in selected_rows}, reverse=True)
+        valid_positions = [row for row in selected_positions if 0 <= row < len(current_df)]
+        if not valid_positions:
+            ui.notification_show("Selected rows are no longer available.", type="warning")
+            return
+
+        updated_df = current_df.drop(current_df.index[valid_positions]).reset_index(drop=True)
         form_df.set(updated_df)
         working_source.set("form")
-        ui.notification_show(_current_text_labels()["deleted_message"].format(count=len(selected_rows)), type="message")
+        ui.notification_show(_current_text_labels()["deleted_message"].format(count=len(valid_positions)), type="message")
 
     @reactive.Effect
     @reactive.event(input.btn_reset_cohort)
@@ -528,6 +563,7 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
         validation_errors.set([])
         validation_success.set(None)
         pending_data.set(None)
+        last_valid_data.set(None)
         pending_is_custom.set(False)
         pending_signature.set(None)
         confirmed_signature.set(None)
@@ -590,16 +626,15 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
             validation_errors.set(errors)
             if errors:
                 validation_success.set(None)
-                pending_data.set(None)
                 pending_is_custom.set(is_custom)
                 pending_signature.set(None)
                 confirmed_ready.set(False)
-                output_data.set(None)
                 output_is_custom.set(False)
                 ui.notification_show("Input validation failed. See details in Data Input.", type="error")
                 return
             validation_success.set(_validation_success_message(clean_df, current_cfg, method))
             pending_data.set(clean_df)
+            last_valid_data.set(clean_df.copy())
             pending_is_custom.set(is_custom)
             current_signature = _data_signature(clean_df, is_custom)
             pending_signature.set(current_signature)
@@ -611,6 +646,7 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
             validation_errors.set([])
             validation_success.set(None)
             pending_data.set(None)
+            last_valid_data.set(None)
             pending_is_custom.set(is_custom)
             pending_signature.set(None)
             confirmed_ready.set(False)
@@ -661,7 +697,7 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     @render.ui
     def apply_data_ui():
         clean_df = pending_data.get()
-        if clean_df is None or clean_df.empty or validation_errors.get():
+        if clean_df is None or clean_df.empty:
             return None
 
         labels = _current_text_labels()
@@ -759,6 +795,8 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     def delete_selected_action():
         df = pending_data.get()
         if df is None or df.empty:
+            df = last_valid_data.get()
+        if df is None or df.empty:
             df = output_data.get()
         if df is None or df.empty:
             return None
@@ -782,6 +820,10 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     @render.ui
     def cohort_table_header():
         df = pending_data.get()
+        if df is None or df.empty:
+            df = last_valid_data.get()
+        if df is None or df.empty:
+            df = output_data.get()
         if df is None or df.empty:
             df = form_df.get()
         row_count = 0 if df is None else len(df)
@@ -867,6 +909,8 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     def current_set_body():
         display_df = pending_data.get()
         if display_df is None or display_df.empty:
+            display_df = last_valid_data.get()
+        if display_df is None or display_df.empty:
             display_df = output_data.get()
 
         if display_df is None or display_df.empty:
@@ -886,6 +930,8 @@ def server(input: Inputs, output: Outputs, session: Session, model_data, config_
     @render.data_frame
     def out_patient_table():
         display_df = pending_data.get()
+        if display_df is None or display_df.empty:
+            display_df = last_valid_data.get()
         if display_df is None or display_df.empty:
             display_df = output_data.get()
 

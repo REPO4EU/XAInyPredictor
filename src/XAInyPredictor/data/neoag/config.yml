@@ -144,6 +144,8 @@ labels:
   example_cohort: "Example Candidate Set"
   positive_class_label: "Immunogenic"
   negative_class_label: "Non-immunogenic"
+  positive_class_color: "#198754"
+  negative_class_color: "#dc3545"
   probability_column: "Immunogenicity Score"
   class_column: "Candidate Class"
 
