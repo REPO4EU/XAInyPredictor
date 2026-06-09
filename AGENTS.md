@@ -14,7 +14,7 @@ shiny run src/XAInyPredictor/app.py --port 8001    # Alternative
 - **Generate docs**: `doxygen ./docs/Doxyfile`
 
 ## Testing
-No tests exist. `test/tests.py` is a broken template leftover (imports `mymodule.template` which never existed). No test framework is properly configured.
+No tests exist. No test framework is properly configured.
 
 ## Type Checking
 None configured (no mypy, pyright, etc.).

@@ -1,5 +1,6 @@
 import os
 import math
+import logging
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import numpy as np
@@ -9,6 +10,8 @@ import seaborn as sns
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer
 from sklearn.preprocessing import StandardScaler
+
+logger = logging.getLogger(__name__)
 
 
 def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, encoding_config: dict = None, target: str = 'class_target', allowed_columns: list | None = None) -> pd.DataFrame:
@@ -28,7 +31,7 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, encod
     :rtype: DataFrame
     """
     if output_file != None and os.path.exists(output_file):
-        print("Processed dataset already exists! Skipping processing.")
+        logger.debug("Processed dataset already exists. Skipping processing.")
         df = pd.read_csv(output_file)
         return df
 
@@ -51,20 +54,33 @@ def process_raw_data(raw_df: pd.DataFrame, output_file: str | None = None, encod
 
     # Process data
     clean_df = clean_data(raw_df, allowed_columns=allowed_columns)
+    generated_figures = []
     if target:
-        target_prop_plot = check_target_proportion(clean_df)
-    non_numeric_summary = check_non_numeric_features(clean_df)
+        generated_figures.append(check_target_proportion(clean_df))
+    check_non_numeric_features(clean_df)
     clean_nomissing_df = handle_missing_values(clean_df)
     num_feat_results = plot_distribution_numerical_features(clean_nomissing_df)
     cat_feat_results = plot_distribution_categorical_features(clean_nomissing_df)
-    (outliers_iqr, outliers_z) = detect_outliers(clean_nomissing_df)
+    detect_outliers(clean_nomissing_df)
     cramers_results = calculate_cramers_v_matrix(clean_nomissing_df)
+    generated_figures.extend(
+        fig
+        for fig in [
+            num_feat_results.get('histogram'),
+            num_feat_results.get('boxplot'),
+            cat_feat_results.get('plot'),
+            cramers_results.get('plot'),
+        ]
+        if fig is not None
+    )
     norm_df = normalize_and_encode_features(clean_nomissing_df, encoding_dict)
+    for fig in generated_figures:
+        plt.close(fig)
 
     # Save the processed dataset to a CSV file
     if output_file != None:
         norm_df.to_csv(output_file, index=False)
-        print(f"Processed dataset saved to {output_file}")
+        logger.debug("Processed dataset saved to %s", output_file)
     return norm_df
 
 
@@ -156,8 +172,7 @@ def check_target_proportion(
     """
     # Check the proportions of the target feature
     target_counts = df[target].value_counts(normalize=True)
-    print(f"Proportions of the target feature:")
-    print(target_counts)
+    logger.debug("Proportions of the target feature:\n%s", target_counts)
 
     # Visualize the proportions using a bar plot
     sns.barplot(y=target_counts.values, hue=target_counts.index, palette='viridis')
@@ -190,7 +205,7 @@ def check_non_numeric_features(df: pd.DataFrame) -> dict:
 
     # Display the non-numeric values in each column
     for column, values in non_numeric_summary.items():
-        print(f"Non-numeric entries in '{column}':", values)
+        logger.debug("Non-numeric entries in '%s': %s", column, values)
 
     return non_numeric_summary
 
@@ -205,17 +220,16 @@ def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     :return: Pandas dataframe containing the new data frame with the imputated values.
     :rtype: pd.DataFrame
     """
-    missing_percent_df = check_percent_missing_values(df)
+    check_percent_missing_values(df)
 
     proc_df = df.copy()
 
     proc_df = imputate_numerical_values_with_median(proc_df)
     proc_df = imputate_categorical_values_with_mode(proc_df)
 
-    missing_percent_df2 = check_percent_missing_values(proc_df)
+    check_percent_missing_values(proc_df)
 
-    print("Dataset after handling missing values:")
-    print(proc_df.head())
+    logger.debug("Dataset after handling missing values:\n%s", proc_df.head())
 
     return proc_df
 
@@ -242,8 +256,7 @@ def check_percent_missing_values(df: pd.DataFrame) -> pd.DataFrame:
         '% Total Values': missing_percent
     })
 
-    print("Missing Values Summary:")
-    print(missing_percent_df)
+    logger.debug("Missing Values Summary:\n%s", missing_percent_df)
 
     return missing_percent_df
 
@@ -266,7 +279,7 @@ def imputate_values_for_feature_with_reference(df: pd.DataFrame,
     :return: Pandas dataframe containing the data frame with the imputated values.
     :rtype: pd.DataFrame
     """
-    print(f"Imputating values for feature {feature_to_imputate}...")
+    logger.debug("Imputing values for feature %s...", feature_to_imputate)
     # Check if feature_to_imputate in reference_features
     if feature_to_imputate not in reference_features:
         reference_features.append(feature_to_imputate)
@@ -284,7 +297,7 @@ def imputate_values_for_feature_with_reference(df: pd.DataFrame,
 
         # Stop if non-numeric values other than nan are found
         if non_numeric_mask.any():
-            print(f"Non-numeric column found: {column}. Imputation of values for {feature_to_imputate} is not possible!")
+            logger.debug("Non-numeric column found: %s. Imputation of values for %s is not possible.", column, feature_to_imputate)
             return df
 
     # Initialize and apply the IterativeImputer
@@ -296,7 +309,7 @@ def imputate_values_for_feature_with_reference(df: pd.DataFrame,
 
     # Check if any missing values remain in 'BMI'
     remaining_missing_values = df[feature_to_imputate].isna().sum()
-    print(f"Missing values remaining after imputation for {feature_to_imputate}: {remaining_missing_values}")
+    logger.debug("Missing values remaining after imputation for %s: %s", feature_to_imputate, remaining_missing_values)
 
     return df
 
@@ -346,7 +359,7 @@ def plot_distribution_numerical_features(df: pd.DataFrame) -> dict:
     numerical_columns = df.select_dtypes(include=['number']).columns.tolist()
 
     if not numerical_columns:
-        print("No numerical columns found in the dataframe.")
+        logger.debug("No numerical columns found in the dataframe.")
         return {
             'histogram': None,
             'boxplot': None,
@@ -354,12 +367,11 @@ def plot_distribution_numerical_features(df: pd.DataFrame) -> dict:
             'distribution_info': None
         }
 
-    print("Numerical columns:", numerical_columns)
+    logger.debug("Numerical columns: %s", numerical_columns)
 
     # Get distribution summary
     distribution_info = df.describe()
-    print("Numerical Variables Distribution Summary:")
-    print(distribution_info)
+    logger.debug("Numerical Variables Distribution Summary:\n%s", distribution_info)
 
     # Set up a grid for numerical columns
     num_cols = len(numerical_columns)
@@ -422,10 +434,10 @@ def plot_distribution_categorical_features(df: pd.DataFrame) -> dict:
     categorical_columns = df.select_dtypes(exclude=['number']).columns.tolist()
 
     if not categorical_columns:
-        print("No categorical columns found in the dataframe.")
+        logger.debug("No categorical columns found in the dataframe.")
         return {'plot': None, 'columns': [], 'distribution_info': None}
 
-    print("Categorical columns:", categorical_columns)
+    logger.debug("Categorical columns: %s", categorical_columns)
 
     # Set up a grid for categorical columns
     num_cols = len(categorical_columns)
@@ -526,14 +538,14 @@ def detect_outliers(df: pd.DataFrame) -> tuple:
     # Detect outliers using IQR
     outliers_iqr = detect_outliers_iqr(df, numerical_cols)
     for col, outliers in outliers_iqr.items():
-        print(f"{col} has {len(outliers)} outliers based on IQR.")
+        logger.debug("%s has %s outliers based on IQR.", col, len(outliers))
 
     # Identify outliers with z-score > 3 or < -3
     outliers_z = detect_outliers_zscore(df, numerical_cols, 3)
 
     # Display outliers using z-score
     for col in numerical_cols:
-        print(f"{col} has {len(outliers_z)} outliers based on z-scores.")
+        logger.debug("%s has %s outliers based on z-scores.", col, len(outliers_z))
     return (outliers_iqr, outliers_z)
 
 
@@ -552,6 +564,8 @@ def cramers_v(x: list | pd.Series, y: list | pd.Series) -> float:
     chi2 = chi2_contingency(contingency_table)[0]
     n = contingency_table.sum().sum()
     r, k = contingency_table.shape
+    if n == 0 or min(r, k) <= 1:
+        return np.nan
     return np.sqrt(chi2 / (n * (min(r, k) - 1)))
 
 
@@ -581,12 +595,11 @@ def calculate_cramers_v_matrix(df: pd.DataFrame) -> dict:
     mask = np.triu(np.ones_like(cramers_v_matrix, dtype=bool))
 
     # Visualize the lower triangle of the Cramér's V matrix
-    sns.heatmap(cramers_v_matrix, mask=mask, annot=True, cmap='coolwarm', square=True, cbar_kws={'label': "Cramér's V"})
+    fig, ax = plt.subplots()
+    sns.heatmap(cramers_v_matrix, mask=mask, annot=True, cmap='coolwarm', square=True, cbar_kws={'label': "Cramér's V"}, ax=ax)
     plt.title("Cramér's V Matrix for Categorical Variables")
     plt.xticks(rotation=45, ha='right')
     plt.yticks(rotation=0)
-    plt.show()
-    fig = plt.gcf() # get current figure
     return {'plot': fig,
             'matrix': cramers_v_matrix}
 
@@ -671,6 +684,5 @@ def normalize_and_encode_features(
     """
     df = normalize_numerical_features(df)
     df = encode_categorical_features(df, encoding_dict)
-    print("Dataset after standardization of numerical and categorical features:")
-    print(df.head())
+    logger.debug("Dataset after standardization of numerical and categorical features:\n%s", df.head())
     return df

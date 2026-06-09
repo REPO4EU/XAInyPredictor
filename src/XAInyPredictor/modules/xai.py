@@ -5,11 +5,15 @@ from matplotlib.projections.polar import PolarAxes
 import matplotlib.pyplot as plt
 from matplotlib.spines import Spine
 from matplotlib.transforms import Affine2D
+import logging
 import numpy as np
 import pandas as pd
 import re
 from sklearn.model_selection import train_test_split
 import sympy  # See https://github.com/knottwill/CoxKAN/blob/main/reprod/results.ipynb
+
+logger = logging.getLogger(__name__)
+_DELTA_XAI_FN_CACHE = {}
 
 
 def split_data_with_known_target(input_df, target='class_target', test_split=0.2):
@@ -36,7 +40,7 @@ def split_data_with_known_target(input_df, target='class_target', test_split=0.2
     return x_train, x_test, y_train, y_test
 
 
-def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str):
+def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str, simplify_formula: bool = True):
     """
     Reads the XAI output pickle file formula.pkl, which contains the formula of
     the XAI model, and simplifies it using the package sympy. Reads the file
@@ -55,12 +59,14 @@ def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str
         formula = pd.read_pickle(f)
 
     # Show the formula saved
-    print(f"Logit 0 formula: {formula[0]}")
-    print(f"Logit 1 formula: {formula[1]}")
+    logger.debug("Logit 0 formula: %s", formula[0])
+    logger.debug("Logit 1 formula: %s", formula[1])
 
     # Simplify formula
-    delta_formula = sympy.simplify(formula[1] - formula[0])
-    print(f"Delta formula simplified: {delta_formula}")
+    delta_formula = formula[1] - formula[0]
+    if simplify_formula:
+        delta_formula = sympy.simplify(delta_formula)
+    logger.debug("Delta formula simplified: %s", delta_formula)
 
     # Read best formula file and extract variables
     with open(current_best_formula_file, 'r') as f:
@@ -68,7 +74,7 @@ def read_delta_xai_formula(formula_pkl_file: str, current_best_formula_file: str
             if line.startswith('Variables:'):
                 feature_order = eval(line.strip().split(': ')[1])
     feature_mappings = {str(idx+1) : feat_name for idx, feat_name in enumerate(feature_order)}
-    print(f"Feature mappings: {'; '.join([f'x_{idx} = {feat_name}' for idx, feat_name in feature_mappings.items()])}")
+    logger.debug("Feature mappings: %s", '; '.join([f'x_{idx} = {feat_name}' for idx, feat_name in feature_mappings.items()]))
 
     # Get features in formula
     vars_in_formula = set(re.findall(r'x_(\d+)', str(delta_formula)))
@@ -101,23 +107,29 @@ def delta_xai(d_form, x_in: pd.DataFrame, feature_order: list | None = None):
         x_in = x_in[feature_order]
 
     x_d = x_in.to_numpy()
+    n_features = x_d.shape[1]
     delta = np.zeros(
-        (x_d.shape[0], x_d.shape[1] + 1))  # One input per covariate, one extra output for the constant term
-    for i in range(x_d.shape[0]):
-        for j in range(x_d.shape[1]):
-            func = d_form.copy()
-            for k in range(x_d.shape[1]):
-                if k == j:
-                    func = func.subs(f'x_{k + 1}', x_d[i, j])
-                else:
-                    func = func.subs(f'x_{k + 1}', 0)
-            delta[i, j] = float(func)
-        # Get the constant term
-        func = d_form.copy()
-        for k in range(x_d.shape[1]):
-            func = func.subs(f'x_{k + 1}', 0)
-        delta[i, -1] = float(func)
-        delta[i, :-1] -= delta[i, -1]  # Subtract the constant term from all the other terms (only account for it once)
+        (x_d.shape[0], n_features + 1))  # One input per covariate, one extra output for the constant term
+
+    cache_key = (str(d_form), tuple(x_in.columns))
+    if cache_key not in _DELTA_XAI_FN_CACHE:
+        symbols = [sympy.Symbol(f"x_{idx + 1}") for idx in range(n_features)]
+        zero_subs = {symbol: 0 for symbol in symbols}
+        const = float(d_form.subs(zero_subs))
+        partial_fns = []
+        for symbol in symbols:
+            partial_subs = {other_symbol: 0 for other_symbol in symbols if other_symbol != symbol}
+            partial_expr = d_form.subs(partial_subs)
+            partial_fns.append(sympy.lambdify(symbol, partial_expr, "numpy"))
+        _DELTA_XAI_FN_CACHE[cache_key] = const, partial_fns
+
+    const, partial_fns = _DELTA_XAI_FN_CACHE[cache_key]
+    for j, partial_fn in enumerate(partial_fns):
+        values = partial_fn(x_d[:, j])
+        delta[:, j] = np.asarray(values, dtype=float)
+
+    delta[:, -1] = const
+    delta[:, :-1] -= const  # Subtract the constant term from all the other terms (only account for it once)
     delta = pd.DataFrame(delta, index=x_in.index, columns=x_in.columns.tolist() + ['const'])
     delta["pred_prob"] = 1. / (1 + np.exp(-delta.values.sum(axis=1)))
     return delta
@@ -186,9 +198,10 @@ def analyze_patient(
         show_average_class1_radial=True,
         neg_class_label="Negative",
         pos_class_label="Positive",
+        entity_label="Patient",
     ):
 
-    print(f"Analyzing patient {patient_id}")
+    logger.debug("Analyzing patient %s", patient_id)
 
     # Get feature values from patient selected and save them in delta_patient
     patient_index = df[df['ID'] == int(patient_id)].index.to_list()[0]
@@ -237,9 +250,9 @@ def analyze_patient(
         # avg_proba = 1 / (1 + np.exp(-delta_train_values_noconst.mean(axis=0)))
         # avg_proba_class0 = 1 / (1 + np.exp(-delta_train_class0_values_noconst.mean(axis=0)))
         # avg_proba_class1 = 1 / (1 + np.exp(-delta_train_class1_values_noconst.mean(axis=0)))
-        title = f"Patient {patient_id} (prob = {pred_proba_patient:.2f}, mean = {avg_proba[0]:.2f})"
-        fig_radar, ax = plt.subplots(figsize=(6, 6), subplot_kw=dict(projection='radar'))
-        # fig.subplots_adjust(top=0.85, bottom=0.05)
+        title = f"{entity_label} {patient_id} (prob = {pred_proba_patient:.2f}, mean = {avg_proba[0]:.2f})"
+        fig_radar, ax = plt.subplots(figsize=(7.8, 5.8), subplot_kw=dict(projection='radar'))
+        fig_radar.subplots_adjust(left=0.32, right=0.96, top=0.86, bottom=0.08)
         ax.set_rgrids([0.2, 0.4, 0.6, 0.8])
         ax.set_title(title, position=(0.5, 1.1), ha='center', weight='bold')
         ax.set_yticklabels([]) # Remove radial axis numbers
@@ -278,22 +291,28 @@ def analyze_patient(
         ax.fill(theta, pat_proba[feature_idx], alpha=0.1, color='r')
 
         ax.set_varlabels([label.replace("_", " ") for label in feature_names])
-        plt.legend(loc='best', ncol=2, bbox_to_anchor=(0.8, -0.1))  # Note: this can be uncommented, but may clutter the plot
+        ax.legend(loc='center left', ncol=1, bbox_to_anchor=(-0.55, 0.5), frameon=True)
 
     # Curves plot: show only the ones that do matter!!
     # Revert again the order to have the right plot order
     feature_idx_inv = feature_idx[::-1]
     cols_vars = [delta_test.columns[i] for i in feature_idx_inv]
-    #print(cols_vars)
 
     n_feats = min(len(cols_vars), max_plot_curves)  # Number of features to show in the curves plot
     if n_feats > 0: # There is something to show
         dtrain_df = pd.DataFrame(delta_train_values, columns=feature_names+['const'])
         fig_curve, axs = plt.subplots(n_feats + 1, 1, figsize=(6, 2 * (n_feats + 1)))
-        x_vals = np.arange(delta_train_values.sum(axis=1).min(), delta_train_values.sum(axis=1).max(), 0.01)
+        clipped_train_prob = np.clip(delta_train["pred_prob"].to_numpy(dtype=float), 1e-9, 1 - 1e-9)
+        train_logits = np.log(clipped_train_prob / (1 - clipped_train_prob))
+        clipped_patient_prob = np.clip(pred_proba_patient, 1e-9, 1 - 1e-9)
+        patient_logit = float(np.log(clipped_patient_prob / (1 - clipped_patient_prob)))
+        x_min = min(float(train_logits.min()), patient_logit)
+        x_max = max(float(train_logits.max()), patient_logit)
+        padding = max((x_max - x_min) * 0.08, 0.1)
+        x_vals = np.linspace(x_min - padding, x_max + padding, 300)
         theor_proba = 1 / (1 + np.exp(-x_vals))
         axs[0].plot(x_vals, theor_proba, 'b', alpha=0.2)
-        axs[0].scatter(delta_patient.values.sum(), pred_proba_patient, color='r')
+        axs[0].scatter(patient_logit, pred_proba_patient, color='r')
         axs[0].set_xlabel('Logit')
         axs[0].set_ylabel('Probability')
         axs[0].set_title(f'Patient results')
@@ -301,16 +320,35 @@ def analyze_patient(
         for idj, feat_name in enumerate(cols_vars):
             if idj < n_feats: # Only plot the first n_feats features
                 j = idj + 1  # The first plot is already used for the theoretical curve
-                # Keep only unique values of x_test[feat_name]
-                idxs = np.unique(x_train[feat_name].values, return_index=True)[1]
-                axs[j].plot(x_train[feat_name].values[idxs], dtrain_df[feat_name].values[idxs], color='b')
-                axs[j].scatter(x_train[feat_name].values[idxs], dtrain_df[feat_name].values[idxs],
-                                    color='b', alpha=0.1)
+                curve_df = pd.DataFrame(
+                    {
+                        "x": x_train[feat_name].values,
+                        "y": dtrain_df[feat_name].values,
+                    }
+                ).dropna().sort_values("x")
+                curve_df = curve_df.drop_duplicates("x", keep="first")
+                if len(curve_df) > 1:
+                    axs[j].plot(curve_df["x"].values, curve_df["y"].values, color='b')
+                axs[j].scatter(curve_df["x"].values, curve_df["y"].values, color='b', alpha=0.1)
                 for jj in range(n_dists):
                     axs[j].scatter(x_train.iloc[idx_closest[jj]][feat_name], dtrain_df.iloc[idx_closest[jj]][feat_name],
                                         color='lightsalmon', alpha=1)
 
-                axs[j].scatter(patient_info[feat_name], delta_patient[feat_name], color='r')
+                patient_x = float(patient_info[feat_name].iloc[0])
+                patient_y = float(delta_patient[feat_name].iloc[0])
+                axs[j].scatter(patient_x, patient_y, color='r')
+                x_axis_values = curve_df["x"].tolist() + [patient_x]
+                y_axis_values = curve_df["y"].tolist() + [patient_y]
+                if x_axis_values:
+                    x_axis_min = min(x_axis_values)
+                    x_axis_max = max(x_axis_values)
+                    x_padding = max((x_axis_max - x_axis_min) * 0.08, 0.05)
+                    axs[j].set_xlim(x_axis_min - x_padding, x_axis_max + x_padding)
+                if y_axis_values:
+                    y_axis_min = min(y_axis_values)
+                    y_axis_max = max(y_axis_values)
+                    y_padding = max((y_axis_max - y_axis_min) * 0.08, 0.05)
+                    axs[j].set_ylim(y_axis_min - y_padding, y_axis_max + y_padding)
                 axs[j].set_ylabel(f"logit {feat_name.replace('_', ' ')}")
 
         return fig_radar, fig_curve
@@ -332,14 +370,14 @@ def analyze_patient_new(
         show_average_class1_radial=True
     ):
 
-    print(f"Analyzing patient {patient_id} with Enhanced Visualization...")
+    logger.debug("Analyzing patient %s with enhanced visualization.", patient_id)
 
     # --- 1. DATA PREPARATION ---
     
     # Locate patient
     patient_ids = df['ID'].astype(int).tolist()
     if int(patient_id) not in patient_ids:
-        print(f"Error: Patient {patient_id} not found.")
+        logger.debug("Patient %s not found.", patient_id)
         return None, None
         
     patient_index = df[df['ID'] == int(patient_id)].index[0]
